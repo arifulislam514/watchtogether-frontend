@@ -1,11 +1,13 @@
 // src/components/Navbar.jsx
 import { Link, useNavigate } from 'react-router-dom'
-import { LogOut, Video, LayoutDashboard, User } from 'lucide-react'
+import { LogOut, Video, LayoutDashboard, User, ShieldAlert } from 'lucide-react'
 import useAuth from '../hooks/useAuth'
+import useProfile from '../hooks/useProfile'
 
 const Navbar = () => {
-  const { logout } = useAuth()
-  const navigate   = useNavigate()
+  const { logout }    = useAuth()
+  const { profile }   = useProfile()
+  const navigate      = useNavigate()
 
   const handleLogout = () => {
     logout()
@@ -46,6 +48,17 @@ const Navbar = () => {
             <User size={16} />
             Profile
           </Link>
+
+          {/* Only visible to staff/admin users */}
+          {profile?.is_staff && (
+            <Link
+              to="/admin"
+              className="flex items-center gap-2 text-sm text-yellow-400 hover:text-yellow-300 transition-colors"
+            >
+              <ShieldAlert size={16} />
+              Admin
+            </Link>
+          )}
 
           <button
             onClick={handleLogout}

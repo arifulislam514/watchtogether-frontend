@@ -13,6 +13,7 @@ import VideoLibraryPage from '../pages/VideoLibraryPage'
 import RoomPage        from '../pages/RoomPage'
 import ProfilePage     from '../pages/ProfilePage'
 import NotFoundPage    from '../pages/NotFoundPage'
+import AdminPage from '../pages/AdminPage'
 
 const AppRoutes = () => {
   return (
@@ -35,6 +36,7 @@ const AppRoutes = () => {
             <Route path="/videos"     element={<VideoLibraryPage />} />
             <Route path="/rooms/:id"  element={<RoomPage />} />
             <Route path="/profile"    element={<ProfilePage />} />
+            <Route path="/admin" element={<AdminPage />} />
           </Route>
         </Route>
 
