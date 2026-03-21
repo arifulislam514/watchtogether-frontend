@@ -91,10 +91,19 @@ const VideoCard = ({ video, onDelete }) => {
           </div>
         )}
 
-        {/* Processing progress indicator */}
+        {/* Processing progress bar with real % */}
         {(video.status === 'processing' || video.status === 'uploading') && (
-          <div className="w-full bg-gray-800 rounded-full h-1 mb-3">
-            <div className="bg-violet-500 h-1 rounded-full animate-pulse w-2/3" />
+          <div className="mb-3">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs text-gray-500">{video.stage || 'Processing...'}</span>
+              <span className="text-xs text-violet-400 font-medium">{video.progress || 0}%</span>
+            </div>
+            <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-violet-500 h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${video.progress || 0}%` }}
+              />
+            </div>
           </div>
         )}
 

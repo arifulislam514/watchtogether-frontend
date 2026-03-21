@@ -106,6 +106,8 @@ const RoomPage = () => {
   const hasPlayedRef = useRef(false);
   // Network wait debounce timer
   const networkWaitTimer = useRef(null);
+  // ✅ True when someone else paused — blocks local play
+  const blockedRef = useRef(false);
   // Periodic sync interval (broadcasts current time every 2s when playing)
   const syncIntervalRef = useRef(null);
   // handleSignaling ref to avoid stale closure
@@ -422,6 +424,8 @@ const RoomPage = () => {
     try {
       await authAxios.post(`/api/rooms/${id}/leave/`);
     } catch (_err) {}
+    // ✅ Notify others before WS closes
+    send({ type: "LEAVE_ROOM" });
     navigate("/dashboard");
   };
 
