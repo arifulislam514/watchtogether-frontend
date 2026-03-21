@@ -222,8 +222,9 @@ const RoomPage = () => {
           break;
 
         case "PLAY":
-          // skip my own echo
           if (event.sender_id === myId) break;
+          // ✅ Unblock so local play attempts work again
+          blockedRef.current = false;
           applyRemote(() => {
             if (videoRef.current) {
               videoRef.current.currentTime = event.timestamp;
@@ -238,6 +239,8 @@ const RoomPage = () => {
 
         case "PAUSE":
           if (event.sender_id === myId) break;
+          // ✅ Block local play until this person resumes
+          blockedRef.current = true;
           applyRemote(() => {
             if (videoRef.current) {
               videoRef.current.currentTime = event.timestamp;
@@ -245,6 +248,12 @@ const RoomPage = () => {
             }
           });
           isPlayingRef.current = false;
+          // ✅ Cancel any pending NETWORK_WAIT — don't send it when paused
+          if (networkWaitTimer.current) {
+            clearTimeout(networkWaitTimer.current);
+            networkWaitTimer.current = null;
+          }
+          iSentNetworkWaitRef.current = false;
           setPausedBy(event.user_name);
           setPausedById(event.sender_id);
           break;
@@ -469,7 +478,13 @@ const RoomPage = () => {
   // ── Video player event handlers (user-initiated only) ──────
   const handlePause = (timestamp) => {
     isPlayingRef.current = false;
+    blockedRef.current = false;  // I paused — I can resume
     stopSyncBroadcast();
+    // Cancel any pending NETWORK_WAIT
+    if (networkWaitTimer.current) {
+      clearTimeout(networkWaitTimer.current);
+      networkWaitTimer.current = null;
+    }
     send({ type: "PAUSE", timestamp });
     setPausedBy("You");
     setPausedById(String(user?.id));
@@ -498,7 +513,10 @@ const RoomPage = () => {
   };
 
   const handleBuffer = () => {
+    // ✅ Never send NETWORK_WAIT when paused — check actual DOM state + refs
     if (!hasPlayedRef.current || !isPlayingRef.current) return;
+    if (videoRef.current?.paused) return;   // DOM truth check
+    if (blockedRef.current) return;         // someone else paused us
     // ✅ Block during initial HLS buffering after auto-play
     if (Date.now() < blockNetworkWaitUntilRef.current) return;
     if (networkWaitTimer.current) clearTimeout(networkWaitTimer.current);
@@ -617,6 +635,7 @@ const RoomPage = () => {
                 masterUrl={room.video_detail.master_url}
                 videoRef={videoRef}
                 isSyncingRef={isSyncingRef}
+                blockedRef={blockedRef}
                 onPause={handlePause}
                 onPlay={handlePlay}
                 onSeeked={handleSeeked}

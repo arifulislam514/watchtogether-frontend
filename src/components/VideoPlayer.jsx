@@ -90,8 +90,7 @@ const VideoPlayer = ({
       const hls = new Hls({
         enableWorker:   true,
         startLevel:     -1,
-        // Make sure subtitles are handled
-        renderTextTracksNatively: false,
+        renderTextTracksNatively: true,  // let browser render subtitles natively
       })
       hlsRef.current = hls
       hls.loadSource(fullUrl)
@@ -193,7 +192,13 @@ const VideoPlayer = ({
   const handlePause  = () => { if (!isSyncingRef?.current) onPause?.(videoRef.current?.currentTime  || 0) }
   const handlePlay   = () => {
     if (isSyncingRef?.current) return
-    if (blockedRef?.current) { videoRef.current?.pause(); return }
+    if (blockedRef?.current) {
+      // ✅ Set syncing BEFORE pausing so handlePause doesn't broadcast
+      isSyncingRef.current = true
+      videoRef.current?.pause()
+      setTimeout(() => { isSyncingRef.current = false }, 300)
+      return
+    }
     onPlay?.(videoRef.current?.currentTime || 0)
   }
   const handleSeeked = () => { if (!isSyncingRef?.current) onSeeked?.(videoRef.current?.currentTime || 0) }
@@ -201,7 +206,18 @@ const VideoPlayer = ({
   // ── Track switch helpers ───────────────────────────────────
   const switchQuality  = (v) => { if (hlsRef.current) { hlsRef.current.currentLevel  = v; setCurrentLevel(v)   } }
   const switchAudio    = (v) => { if (hlsRef.current) { hlsRef.current.audioTrack    = v; setCurrentAudio(v)   } }
-  const switchSubtitle = (v) => { if (hlsRef.current) { hlsRef.current.subtitleTrack = v; setCurrentSubtitle(v)} }
+  const switchSubtitle = (v) => {
+    if (hlsRef.current) {
+      hlsRef.current.subtitleTrack = v
+      // ✅ For native rendering: activate the correct TextTrack on the video element
+      if (videoRef.current?.textTracks) {
+        Array.from(videoRef.current.textTracks).forEach((track, i) => {
+          track.mode = (v >= 0 && i === v) ? 'showing' : 'hidden'
+        })
+      }
+      setCurrentSubtitle(v)
+    }
+  }
 
   // ── Menu items ─────────────────────────────────────────────
   const qualityItems = [

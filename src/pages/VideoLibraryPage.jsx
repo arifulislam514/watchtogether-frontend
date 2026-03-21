@@ -29,6 +29,20 @@ const formatSize = (bytes) => {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`
 }
 
+// Estimate remaining time based on file size and progress
+const estimateETA = (video) => {
+  const prog = video.progress || 0
+  if (prog <= 0) return null
+  if (prog >= 100) return null
+  // Rough estimate: 1MB takes ~3s to transcode on Render free tier
+  const totalSecs = Math.max(30, (video.file_size / (1024 * 1024)) * 3)
+  const elapsed   = totalSecs * (prog / 100)
+  const remaining = totalSecs - elapsed
+  if (remaining < 60)  return `~${Math.ceil(remaining)}s left`
+  if (remaining < 3600) return `~${Math.ceil(remaining / 60)}m left`
+  return `~${Math.ceil(remaining / 3600)}h left`
+}
+
 const formatDuration = (seconds) => {
   if (!seconds) return '0:00'
   const m = Math.floor(seconds / 60)
@@ -91,17 +105,24 @@ const VideoCard = ({ video, onDelete }) => {
           </div>
         )}
 
-        {/* Processing progress bar with real % */}
+        {/* Processing progress bar with real % and ETA */}
         {(video.status === 'processing' || video.status === 'uploading') && (
           <div className="mb-3">
             <div className="flex justify-between items-center mb-1">
-              <span className="text-xs text-gray-500">{video.stage || 'Processing...'}</span>
-              <span className="text-xs text-violet-400 font-medium">{video.progress || 0}%</span>
+              <span className="text-xs text-gray-500 truncate max-w-[120px]">
+                {video.stage || 'Processing...'}
+              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {estimateETA(video) && (
+                  <span className="text-xs text-gray-600">{estimateETA(video)}</span>
+                )}
+                <span className="text-xs text-violet-400 font-bold">{video.progress || 0}%</span>
+              </div>
             </div>
             <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
               <div
-                className="bg-violet-500 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${video.progress || 0}%` }}
+                className="bg-violet-500 h-1.5 rounded-full transition-all duration-700"
+                style={{ width: `${Math.max(video.progress || 0, 3)}%` }}
               />
             </div>
           </div>
