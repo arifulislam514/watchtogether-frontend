@@ -149,17 +149,17 @@ const VideoCard = ({ video, onDelete }) => {
 
 // ── Upload Modal ───────────────────────────────────────────
 const UploadModal = ({ onClose, onUploaded }) => {
-  const [file,    setFile]    = useState(null)
-  const [title,   setTitle]   = useState('')
-  const [error,   setError]   = useState('')
-  const [loading, setLoading] = useState(false)
-  const fileRef               = useRef()
+  const [file,     setFile]     = useState(null)
+  const [title,    setTitle]    = useState('')
+  const [error,    setError]    = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [stage,    setStage]    = useState('')
+  const fileRef = useRef()
 
   const handleFileChange = (e) => {
     const f = e.target.files[0]
     if (!f) return
-
-    // ✅ Check by extension — browsers send inconsistent MIME types for MKV
     const ext = f.name.split('.').pop().toLowerCase()
     if (!['mp4', 'mkv'].includes(ext)) {
       setError('Only .mp4 and .mkv files are allowed.')
@@ -181,17 +181,45 @@ const UploadModal = ({ onClose, onUploaded }) => {
     }
     setLoading(true)
     setError('')
+
     try {
-      const formData = new FormData()
-      formData.append('title', title)
-      formData.append('file', file)
-      const res = await authAxios.post('/api/videos/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      // Step 1: Get presigned URL from backend
+      setStage('Preparing upload...')
+      const presignRes = await authAxios.post('/api/videos/presigned-upload/', {
+        filename:    file.name,
+        file_size:   file.size,
+        title:       title,
       })
-      onUploaded(res.data)
-    } catch (_err) {
-      setError('Upload failed. Please try again.')
-    } finally {
+      const { video_id, upload_url } = presignRes.data
+
+      // Step 2: Upload directly to R2 with progress tracking
+      setStage('Uploading to storage...')
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setProgress(Math.round((e.loaded / e.total) * 100))
+          }
+        }
+        xhr.onload = () => {
+          if (xhr.status === 200 || xhr.status === 204) resolve()
+          else reject(new Error(`Upload failed: ${xhr.status}`))
+        }
+        xhr.onerror = () => reject(new Error('Upload failed'))
+        xhr.open('PUT', upload_url)
+        const ext = file.name.split('.').pop().toLowerCase()
+        xhr.setRequestHeader('Content-Type', ext === 'mkv' ? 'video/x-matroska' : 'video/mp4')
+        xhr.send(file)
+      })
+
+      // Step 3: Tell backend upload is done — start transcoding
+      setStage('Starting transcoding...')
+      setProgress(100)
+      const confirmRes = await authAxios.post(`/api/videos/${video_id}/confirm-upload/`)
+      onUploaded(confirmRes.data)
+
+    } catch (err) {
+      setError(err.response?.data?.error || 'Upload failed. Please try again.')
       setLoading(false)
     }
   }
@@ -207,9 +235,8 @@ const UploadModal = ({ onClose, onUploaded }) => {
           </div>
         )}
 
-        {/* Drop zone */}
         <div
-          onClick={() => fileRef.current?.click()}
+          onClick={() => !loading && fileRef.current?.click()}
           className="border-2 border-dashed border-gray-700 hover:border-violet-500 rounded-xl p-8 text-center cursor-pointer transition-colors mb-4"
         >
           <Upload size={32} className="text-gray-600 mx-auto mb-2" />
@@ -233,7 +260,22 @@ const UploadModal = ({ onClose, onUploaded }) => {
           />
         </div>
 
-        {/* Title */}
+        {/* Upload progress */}
+        {loading && (
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs text-gray-500">{stage}</span>
+              <span className="text-xs text-violet-400 font-bold">{progress}%</span>
+            </div>
+            <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-violet-500 h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${Math.max(progress, 3)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col gap-1 mb-6">
           <label className="text-sm font-medium text-gray-300">Title</label>
           <input
@@ -241,7 +283,8 @@ const UploadModal = ({ onClose, onUploaded }) => {
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder="Video title"
-            className="bg-gray-800 border border-gray-700 focus:border-violet-500 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 text-sm outline-none transition-colors"
+            disabled={loading}
+            className="bg-gray-800 border border-gray-700 focus:border-violet-500 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 text-sm outline-none transition-colors disabled:opacity-50"
           />
         </div>
 
@@ -250,7 +293,7 @@ const UploadModal = ({ onClose, onUploaded }) => {
             Cancel
           </Button>
           <Button fullWidth loading={loading} onClick={handleUpload}>
-            Upload
+            {loading ? 'Uploading...' : 'Upload'}
           </Button>
         </div>
       </Card>
