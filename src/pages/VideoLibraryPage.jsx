@@ -135,7 +135,10 @@ const VideoCard = ({ video, onDelete }) => {
                 360p
               </span>
             )}
-            {video.url_720p && (
+            {video.url_480p && (
+            <span className="text-xs px-2 py-0.5 bg-gray-800 border border-gray-700 rounded text-gray-400">480p</span>
+          )}
+          {video.url_720p && (
               <span className="text-xs px-2 py-0.5 bg-gray-800 border border-gray-700 rounded text-gray-400">
                 720p
               </span>
@@ -202,6 +205,7 @@ const UploadModal = ({ onClose, onUploaded }) => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("");
+  const [qualities, setQualities] = useState(["360p", "480p", "720p"]); // 1080p off by default
   const fileRef = useRef();
 
   const handleFileChange = (e) => {
@@ -226,6 +230,10 @@ const UploadModal = ({ onClose, onUploaded }) => {
       setError("Please select a file and enter a title.");
       return;
     }
+    if (qualities.length === 0) {
+      setError("Please select at least one quality.");
+      return;
+    }
     setLoading(true);
     setError("");
     setProgress(0);
@@ -238,6 +246,7 @@ const UploadModal = ({ onClose, onUploaded }) => {
       const presignRes = await authAxios.post("/api/videos/presigned-upload/", {
         filename: file.name,
         file_size: file.size,
+        qualities: qualities,
         title: title,
       });
       video_id = presignRes.data.video_id;
@@ -357,6 +366,35 @@ const UploadModal = ({ onClose, onUploaded }) => {
           </div>
         )}
 
+        <div className="flex flex-col gap-2 mb-4">
+          <label className="text-sm font-medium text-gray-300">Transcoding Quality</label>
+          <p className="text-xs text-gray-500">More = longer processing · 1080p is off by default</p>
+          <div className="flex gap-2 flex-wrap">
+            {["360p", "480p", "720p", "1080p"].map((q) => (
+              <button
+                key={q}
+                type="button"
+                disabled={loading}
+                onClick={() =>
+                  setQualities((prev) =>
+                    prev.includes(q) ? prev.filter((x) => x !== q) : [...prev, q]
+                  )
+                }
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-50 ${
+                  qualities.includes(q)
+                    ? "bg-violet-600 border-violet-500 text-white"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500"
+                }`}
+              >
+                {q}
+                {q === "1080p" && <span className="ml-1 opacity-60 text-[10px]">(slow)</span>}
+              </button>
+            ))}
+          </div>
+          {qualities.length === 0 && (
+            <p className="text-xs text-red-400">Select at least one quality</p>
+          )}
+        </div>
         <div className="flex flex-col gap-1 mb-6">
           <label className="text-sm font-medium text-gray-300">Title</label>
           <input
