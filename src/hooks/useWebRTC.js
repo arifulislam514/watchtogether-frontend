@@ -1,4 +1,5 @@
 // src/hooks/useWebRTC.js
+// Audio-only WebRTC — video call removed
 import { useRef, useState, useCallback } from 'react'
 
 const ICE_SERVERS = {
@@ -9,112 +10,44 @@ const ICE_SERVERS = {
 }
 
 const useWebRTC = ({ send, currentUserId }) => {
-  const [localStream,  setLocalStream]  = useState(null)
   const [remoteStreams, setRemoteStreams] = useState({})
-  const [isMuted,      setIsMuted]      = useState(false)
-  const [isVideoOn,    setIsVideoOn]    = useState(false)
-  const [callActive,   setCallActive]   = useState(false)
+  const [isMuted,      setIsMuted]       = useState(false)
+  const [callActive,   setCallActive]    = useState(false)
 
-  const peersRef      = useRef({})
+  const peersRef       = useRef({})
   const localStreamRef = useRef(null)
+  const sendRef        = useRef(send)
 
-  // ── Start local media ──────────────────────────────────────
-  const startMedia = useCallback(async (withVideo = false) => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: withVideo,
-      })
+  // Keep sendRef current — avoids stale closure in createPeer
+  sendRef.current = send
 
-      // Start unmuted
-      stream.getAudioTracks().forEach(t => t.enabled = true)
-
-      localStreamRef.current = stream
-      setLocalStream(stream)
-      setCallActive(true)
-      setIsMuted(false)
-      setIsVideoOn(withVideo)
-      return stream
-    } catch (_err) {
-      console.error('Media access denied')
-      return null
-    }
-  }, [])
-
-  // ── Stop all media ─────────────────────────────────────────
-  const stopMedia = useCallback(() => {
-    localStreamRef.current?.getTracks().forEach(t => t.stop())
-    localStreamRef.current = null
-    setLocalStream(null)
-    setCallActive(false)
-    setIsMuted(false)
-    setIsVideoOn(false)
-
-    Object.values(peersRef.current).forEach(pc => pc.close())
-    peersRef.current = {}
-    setRemoteStreams({})
-  }, [])
-
-  // ── Mute / Unmute toggle ───────────────────────────────────
-  const toggleMute = useCallback(() => {
-    const audioTracks = localStreamRef.current?.getAudioTracks()
-    if (!audioTracks) return
-    const newMuted = !isMuted
-    audioTracks.forEach(t => t.enabled = !newMuted)
-    setIsMuted(newMuted)
-  }, [isMuted])
-
-  // ── Toggle video only — keep audio running ─────────────────
-  const toggleVideo = useCallback(() => {
-    if (isVideoOn) {
-      // Stop only video tracks — audio keeps running
-      localStreamRef.current?.getVideoTracks().forEach(t => {
-        t.enabled = false
-        t.stop()
-      })
-      setIsVideoOn(false)
-    } else {
-      // Add video to existing stream
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(videoStream => {
-          const videoTrack = videoStream.getVideoTracks()[0]
-          if (!videoTrack) return
-
-          // Add to local stream
-          localStreamRef.current?.addTrack(videoTrack)
-
-          // Add to all peer connections
-          Object.values(peersRef.current).forEach(pc => {
-            pc.addTrack(videoTrack, localStreamRef.current)
-          })
-
-          setIsVideoOn(true)
-        })
-        .catch(() => console.error('Camera access denied'))
-    }
-  }, [isVideoOn])
-
-  // ── Create peer connection ─────────────────────────────────
+  // ── Create peer connection to one user ─────────────────────
   const createPeer = useCallback((targetUserId, isInitiator) => {
+    // Don't create duplicate peers
+    if (peersRef.current[targetUserId]) {
+      peersRef.current[targetUserId].close()
+      delete peersRef.current[targetUserId]
+    }
+
     const pc = new RTCPeerConnection(ICE_SERVERS)
 
-    // Add local tracks
+    // Add local audio tracks
     localStreamRef.current?.getTracks().forEach(track => {
       pc.addTrack(track, localStreamRef.current)
     })
 
-    // When remote track arrives
+    // When remote audio arrives — store the stream
     pc.ontrack = (event) => {
-      setRemoteStreams(prev => ({
-        ...prev,
-        [targetUserId]: event.streams[0]
-      }))
+      const stream = event.streams[0]
+      if (stream) {
+        setRemoteStreams(prev => ({ ...prev, [targetUserId]: stream }))
+      }
     }
 
-    // Send ICE candidates via WebSocket
+    // Send ICE candidates through the room WebSocket
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        send({
+        sendRef.current({
           type:      'WEBRTC_ICE',
           target:    targetUserId,
           candidate: event.candidate,
@@ -122,66 +55,148 @@ const useWebRTC = ({ send, currentUserId }) => {
       }
     }
 
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        delete peersRef.current[targetUserId]
+        setRemoteStreams(prev => {
+          const next = { ...prev }
+          delete next[targetUserId]
+          return next
+        })
+      }
+    }
+
     peersRef.current[targetUserId] = pc
 
-    // Initiator sends offer
+    // ✅ Initiator creates and sends offer
     if (isInitiator) {
-      pc.createOffer()
+      pc.createOffer({ offerToReceiveAudio: true })
         .then(offer => pc.setLocalDescription(offer))
         .then(() => {
-          send({
+          sendRef.current({
             type:   'WEBRTC_OFFER',
             target: targetUserId,
             sdp:    pc.localDescription,
           })
         })
+        .catch(err => console.error('[WebRTC] createOffer failed:', err))
     }
 
     return pc
-  }, [send])
+  }, [])
+
+  // ── Join voice call ────────────────────────────────────────
+  const startMedia = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      stream.getAudioTracks().forEach(t => { t.enabled = true })
+      localStreamRef.current = stream
+      setCallActive(true)
+      setIsMuted(false)
+
+      // ✅ Tell everyone I joined — they will initiate peer connections to me
+      sendRef.current({ type: 'VOICE_JOIN' })
+
+      return stream
+    } catch (err) {
+      console.error('[WebRTC] Microphone access denied:', err)
+      return null
+    }
+  }, [])
+
+  // ── Leave voice call ───────────────────────────────────────
+  const stopMedia = useCallback(() => {
+    // Stop all local tracks
+    localStreamRef.current?.getTracks().forEach(t => t.stop())
+    localStreamRef.current = null
+
+    // Close all peer connections
+    Object.values(peersRef.current).forEach(pc => pc.close())
+    peersRef.current = {}
+
+    setCallActive(false)
+    setIsMuted(false)
+    setRemoteStreams({})
+
+    // ✅ Tell everyone I left
+    sendRef.current({ type: 'VOICE_LEAVE' })
+  }, [])
+
+  // ── Mute / Unmute ──────────────────────────────────────────
+  const toggleMute = useCallback(() => {
+    const tracks = localStreamRef.current?.getAudioTracks()
+    if (!tracks?.length) return
+    const newMuted = !isMuted
+    tracks.forEach(t => { t.enabled = !newMuted })
+    setIsMuted(newMuted)
+  }, [isMuted])
+
+  // ── Called from RoomPage when VOICE_JOIN received ──────────
+  // If I'm already in the call, I initiate a peer connection to the new user
+  const onRemoteVoiceJoin = useCallback((userId) => {
+    if (!localStreamRef.current) return  // I'm not in the call
+    if (userId === String(currentUserId)) return  // ignore my own echo
+    createPeer(userId, true)  // ✅ I am the initiator
+  }, [createPeer, currentUserId])
+
+  // ── Called from RoomPage when VOICE_LEAVE received ─────────
+  const onRemoteVoiceLeave = useCallback((userId) => {
+    if (peersRef.current[userId]) {
+      peersRef.current[userId].close()
+      delete peersRef.current[userId]
+    }
+    setRemoteStreams(prev => {
+      const next = { ...prev }
+      delete next[userId]
+      return next
+    })
+  }, [])
 
   // ── Handle incoming WebRTC signaling ───────────────────────
   const handleSignaling = useCallback(async (event) => {
     const { type, sender, sdp, candidate, target } = event
+    const myId = String(currentUserId)
 
-    if (target && target !== currentUserId) return
+    // Ignore messages not targeted at me
+    if (target && String(target) !== myId) return
 
-    if (type === 'WEBRTC_OFFER') {
-      const pc = createPeer(sender, false)
-      await pc.setRemoteDescription(new RTCSessionDescription(sdp))
-      const answer = await pc.createAnswer()
-      await pc.setLocalDescription(answer)
-      send({
-        type:   'WEBRTC_ANSWER',
-        target: sender,
-        sdp:    pc.localDescription,
-      })
-    }
-
-    else if (type === 'WEBRTC_ANSWER') {
-      const pc = peersRef.current[sender]
-      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sdp))
-    }
-
-    else if (type === 'WEBRTC_ICE') {
-      const pc = peersRef.current[sender]
-      if (pc && candidate) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate))
+    try {
+      if (type === 'WEBRTC_OFFER') {
+        // Someone sent me an offer — create peer as non-initiator and answer
+        const pc = createPeer(sender, false)
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp))
+        const answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+        sendRef.current({
+          type:   'WEBRTC_ANSWER',
+          target: sender,
+          sdp:    pc.localDescription,
+        })
       }
+      else if (type === 'WEBRTC_ANSWER') {
+        const pc = peersRef.current[sender]
+        if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sdp))
+      }
+      else if (type === 'WEBRTC_ICE') {
+        const pc = peersRef.current[sender]
+        if (pc && candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate))
+        }
+      }
+    } catch (err) {
+      console.error('[WebRTC] Signaling error:', type, err)
     }
-  }, [createPeer, currentUserId, send])
+  }, [createPeer, currentUserId])
 
   return {
-    localStream,
     remoteStreams,
     isMuted,
-    isVideoOn,
     callActive,
     startMedia,
     stopMedia,
     toggleMute,
-    toggleVideo,
-    createPeer,
+    onRemoteVoiceJoin,
+    onRemoteVoiceLeave,
     handleSignaling,
   }
 }

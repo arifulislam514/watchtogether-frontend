@@ -5,7 +5,6 @@ import {
   Mic,
   MicOff,
   Video,
-  VideoOff,
   Phone,
   PhoneOff,
   Send,
@@ -111,7 +110,9 @@ const RoomPage = () => {
   // Periodic sync interval (broadcasts current time every 2s when playing)
   const syncIntervalRef = useRef(null);
   // handleSignaling ref to avoid stale closure
-  const handleSignalingRef = useRef(null);
+  const handleSignalingRef    = useRef(null);
+  const onRemoteVoiceJoinRef  = useRef(null);
+  const onRemoteVoiceLeaveRef = useRef(null);
 
   const isHost = room?.host === user?.id;
 
@@ -370,6 +371,16 @@ const RoomPage = () => {
           });
           break;
 
+        case "VOICE_JOIN":
+          if (event.user_id !== String(user?.id)) {
+            onRemoteVoiceJoinRef.current?.(event.user_id);
+          }
+          break;
+
+        case "VOICE_LEAVE":
+          onRemoteVoiceLeaveRef.current?.(event.user_id);
+          break;
+
         default:
           if (event.type?.startsWith("WEBRTC_"))
             handleSignalingRef.current?.(event);
@@ -393,19 +404,19 @@ const RoomPage = () => {
 
   const {
     isMuted,
-    isVideoOn,
     callActive,
     startMedia,
     stopMedia,
     toggleMute,
-    toggleVideo,
     remoteStreams,
+    onRemoteVoiceJoin,
+    onRemoteVoiceLeave,
     handleSignaling,
   } = useWebRTC({ send, currentUserId: user?.id });
 
-  useEffect(() => {
-    handleSignalingRef.current = handleSignaling;
-  }, [handleSignaling]);
+  useEffect(() => { handleSignalingRef.current    = handleSignaling;    }, [handleSignaling]);
+  useEffect(() => { onRemoteVoiceJoinRef.current  = onRemoteVoiceJoin;  }, [onRemoteVoiceJoin]);
+  useEffect(() => { onRemoteVoiceLeaveRef.current = onRemoteVoiceLeave; }, [onRemoteVoiceLeave]);
 
   // ── Join ───────────────────────────────────────────────────
   const handleJoin = async () => {
@@ -708,31 +719,22 @@ const RoomPage = () => {
                 {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
                 {isMuted ? "Unmute" : "Mute"}
               </button>
-              <button
-                onClick={toggleVideo}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isVideoOn ? "bg-violet-600 text-white hover:bg-violet-700" : "bg-gray-800 text-gray-400 hover:bg-gray-700"}`}
-              >
-                {isVideoOn ? <Video size={16} /> : <VideoOff size={16} />}
-                {isVideoOn ? "Video On" : "Video Off"}
-              </button>
+
               <Button size="sm" variant="danger" onClick={stopMedia}>
                 <PhoneOff size={14} /> Leave Call
               </Button>
             </>
           ) : (
-            <Button size="sm" onClick={() => startMedia(false)}>
+            <Button size="sm" onClick={startMedia}>
               <Phone size={14} /> Join Voice
             </Button>
           )}
           {Object.entries(remoteStreams).map(([userId, stream]) => (
-            <video
+            <audio
               key={userId}
               autoPlay
               playsInline
-              className="w-24 h-16 rounded-lg object-cover bg-gray-800"
-              ref={(el) => {
-                if (el) el.srcObject = stream;
-              }}
+              ref={(el) => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
             />
           ))}
         </div>
