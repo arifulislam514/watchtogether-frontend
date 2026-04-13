@@ -218,14 +218,6 @@ Vercel auto-deploys on every push to `main`.
 
 ---
 
-## Screenshots
-
-| Dashboard | Room | Video Library |
-|---|---|---|
-| Room list + create | Synced player + chat + voice | Upload + transcoding progress |
-
----
-
 ## Author
 
 **Ariful Islam** — [GitHub](https://github.com/arifulislam514) · [Portfolio](https://ariful-islam-iota.vercel.app)
