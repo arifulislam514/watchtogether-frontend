@@ -14,91 +14,109 @@ import VideoPlayer from "../components/VideoPlayer";
 import Button from "../components/ui/Button";
 
 // ── Chat overlay — rendered inside VideoPlayer container (visible in fullscreen) ──
-// Shows last 4 persistent chat messages so they're always visible in fullscreen
+// Shows last few persistent chat/system messages so they're always visible
 const ChatOverlay = ({ messages }) => {
   if (!messages.length) return null
   return (
-    <div className="absolute bottom-20 left-3 flex flex-col gap-1.5 pointer-events-none z-20 max-w-[260px]">
-      {messages.map((msg, i) => (
+    <div className="absolute bottom-[90px] left-4 flex flex-col gap-2 pointer-events-none z-[70] max-w-[320px]">
+      {messages.map((msg) => (
         <div
-          key={i}
+          key={msg.id}
           style={{ animation: "fadeInOut 4s ease forwards" }}
-          className="bg-black/75 text-white px-3 py-1.5 rounded-lg backdrop-blur-sm shadow-lg"
+          className={`px-3.5 py-2 rounded-2xl backdrop-blur-md shadow-lg border text-sm transition-all ${
+            msg.isSystem
+              ? "bg-black/60 border-white/10 text-gray-200"
+              : "bg-black/80 border-white/5 text-white"
+          }`}
         >
-          <span className="text-violet-400 font-semibold text-xs">{msg.user_name}: </span>
-          <span className="text-xs break-words">{msg.text}</span>
+          {msg.isSystem ? (
+            <span className="font-medium text-xs tracking-wide drop-shadow-md">{msg.text}</span>
+          ) : (
+            <>
+              <span className="text-violet-400 font-bold drop-shadow-md">{msg.user_name}: </span>
+              <span className="break-words leading-tight">{msg.text}</span>
+            </>
+          )}
         </div>
       ))}
       <style>{`
         @keyframes fadeInOut {
-          0%   { opacity: 0; transform: translateY(6px); }
-          10%  { opacity: 1; transform: translateY(0); }
-          70%  { opacity: 1; }
-          100% { opacity: 0; }
+          0%   { opacity: 0; transform: translateY(10px) scale(0.95); }
+          10%  { opacity: 1; transform: translateY(0) scale(1); }
+          80%  { opacity: 1; transform: translateY(0) scale(1); }
+          100% { opacity: 0; transform: translateY(-10px) scale(0.95); }
         }
       `}</style>
     </div>
   )
 }
 
-// ── Chat panel (messages list + input) — defined at MODULE level to prevent remount ──
-// ⚠️ MUST be outside RoomPage — if defined inside, React remounts on every render
-// causing the input to lose focus after every single character typed.
+// ── Chat panel (messages list + input) ──
 const ChatPanel = ({ messages, chatInput, setChatInput, onSend, endRef }) => (
   <>
-    <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 min-h-0">
-      {messages.map((msg, i) => (
-        <div key={i}>
-          <span className="text-violet-400 text-xs font-medium">{msg.user_name}</span>
-          <p className="text-sm text-gray-300 break-words">{msg.text}</p>
+    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 min-h-0 scroll-smooth">
+      {messages.map((msg) => (
+        <div key={msg.id} className={msg.isSystem ? "flex justify-center my-1" : "flex flex-col"}>
+          {msg.isSystem ? (
+            <span className="text-[11px] font-medium text-gray-400 bg-gray-800/60 px-3 py-1.5 rounded-full border border-gray-700/50 shadow-sm text-center">
+              {msg.text}
+            </span>
+          ) : (
+            <>
+              <span className="text-violet-400 text-xs font-bold mb-0.5 ml-1">{msg.user_name}</span>
+              <div className="bg-gray-800/80 px-3.5 py-2.5 rounded-2xl rounded-tl-sm w-fit max-w-[90%] border border-gray-700/50 shadow-sm">
+                <p className="text-sm text-gray-100 break-words leading-relaxed">{msg.text}</p>
+              </div>
+            </>
+          )}
         </div>
       ))}
       <div ref={endRef} />
     </div>
-    <div className="p-3 border-t border-gray-800 flex gap-2 shrink-0">
+    <div className="p-3 border-t border-gray-800/80 bg-gray-900/50 flex gap-2 shrink-0">
       <input
         type="text"
         value={chatInput}
         onChange={(e) => setChatInput(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && onSend()}
         placeholder="Say something..."
-        className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-violet-500"
+        className="flex-1 bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 outline-none focus:border-violet-500 transition-colors shadow-inner"
       />
       <button
         onClick={onSend}
-        className="p-2 bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors shrink-0"
+        className="p-2.5 bg-violet-600 hover:bg-violet-500 rounded-xl transition-colors shrink-0 shadow-lg shadow-violet-900/20"
       >
-        <Send size={14} />
+        <Send size={16} />
       </button>
     </div>
   </>
 )
 
 const MemberItem = ({ member, isHost, onRemove, currentUserId }) => (
-  <div className="flex items-center justify-between py-2">
-    <div className="flex items-center gap-2">
-      <div className="w-7 h-7 bg-violet-700 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
+  <div className="flex items-center justify-between py-2 group">
+    <div className="flex items-center gap-2.5">
+      <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-violet-800 rounded-full flex items-center justify-center text-xs font-bold shrink-0 shadow-inner border border-white/10">
         {member.user_name?.[0]?.toUpperCase()}
       </div>
-      <span className="text-sm truncate">
+      <span className="text-sm font-medium truncate">
         {member.user_name}
         {member.user === currentUserId && (
-          <span className="text-gray-500 text-xs ml-1">(you)</span>
+          <span className="text-gray-500 text-xs ml-1.5 font-normal">(you)</span>
         )}
       </span>
     </div>
-    <div className="flex items-center gap-2 shrink-0">
+    <div className="flex items-center gap-3 shrink-0">
       {member.is_ready ? (
-        <CheckCircle size={14} className="text-green-400" />
+        <CheckCircle size={16} className="text-emerald-400" />
       ) : (
-        <Circle size={14} className="text-gray-600" />
+        <Circle size={16} className="text-gray-600" />
       )}
       {isHost && member.user !== currentUserId && (
         <button
           onClick={() => onRemove(member.user)}
-          className="text-red-400 hover:text-red-300 text-xs"
+          className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-300 text-xs font-medium bg-red-400/10 px-2 py-1 rounded-md"
         >
-          Remove
+          Kick
         </button>
       )}
     </div>
@@ -119,9 +137,12 @@ const RoomPage = () => {
   const [joining, setJoining] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [allReady, setAllReady] = useState(false);
+  
+  // Chat States
   const [chatMessages, setChatMessages] = useState([]);
   const [overlayMsgs, setOverlayMsgs] = useState([]);
   const [chatInput, setChatInput] = useState("");
+  
   const [pausedBy, setPausedBy] = useState("");
   const [pausedById, setPausedById] = useState(null);
   const [waiting, setWaiting] = useState(false);
@@ -130,7 +151,7 @@ const RoomPage = () => {
   const [myVideos, setMyVideos] = useState([]);
 
   // ── Mobile tab state ───────────────────────────────────────
-  const [mobileTab, setMobileTab] = useState("chat"); // "chat" | "members"
+  const [mobileTab, setMobileTab] = useState("chat"); 
 
   const videoRef = useRef(null);
   const chatEndRef = useRef(null);
@@ -211,13 +232,81 @@ const RoomPage = () => {
     (event) => {
       const myId = String(user?.id);
 
+      // ✅ Safe Message Appender for standard & system messages
+      const pushMessage = (msgObj) => {
+        const msg = { ...msgObj, id: Date.now() + Math.random() };
+        setChatMessages((prev) => [...prev, msg]);
+        setOverlayMsgs((prev) => [...prev, msg]);
+        // Remove from overlay after 4s (but keeps in sidebar)
+        setTimeout(() => {
+          setOverlayMsgs((prev) => prev.filter((m) => m.id !== msg.id));
+        }, 4000);
+      };
+
       switch (event.type) {
         case "CHAT":
-          setChatMessages((prev) => [...prev, event]);
-          setOverlayMsgs((prev) => {
-            const next = [...prev, event];
-            setTimeout(() => setOverlayMsgs((p) => p.slice(1)), 4000);
-            return next;
+          pushMessage(event);
+          break;
+
+        case "MEMBER_JOINED":
+          refreshRoom();
+          // ✅ Notify when someone joins
+          if (event.user_name && event.user_id !== myId) {
+            pushMessage({ isSystem: true, text: `👋 ${event.user_name} joined the room` });
+          }
+          if (hasPlayedRef.current && videoRef.current) {
+            setTimeout(() => {
+              sendRef.current?.({
+                type: "SYNC_STATE",
+                timestamp: videoRef.current?.currentTime || 0,
+                is_playing: !videoRef.current?.paused,
+              });
+            }, 1500);
+          }
+          break;
+
+        case "MEMBER_LEFT":
+          setWaiting(false);
+          setWaitingFor("");
+          iSentNetworkWaitRef.current = false;
+          // ✅ Notify when someone leaves voluntarily
+          if (event.user_name && event.user_id !== myId) {
+            pushMessage({ isSystem: true, text: `🚪 ${event.user_name} left the room` });
+          }
+          setRoom((prev) => {
+            if (!prev) return prev;
+            const newMembers = prev.members.filter((m) => m.user !== event.user_id);
+            const nowReady = newMembers.length <= 1 || newMembers.every((m) => m.is_ready);
+            setAllReady(nowReady);
+            return { ...prev, members: newMembers };
+          });
+          break;
+
+        case "MEMBER_DISCONNECTED":
+          blockedRef.current = false;
+          if (videoRef.current && !videoRef.current.paused) {
+            applyRemote(() => videoRef.current.pause());
+            isPlayingRef.current = false;
+          }
+          stopSyncBroadcast();
+          setPausedBy(`${event.user_name} disconnected`);
+          setPausedById(null);
+          setWaiting(false);
+          setWaitingFor("");
+          if (networkWaitTimer.current) {
+            clearTimeout(networkWaitTimer.current);
+            networkWaitTimer.current = null;
+          }
+          // ✅ Notify when someone disconnects abruptly
+          if (event.user_name && event.user_id !== myId) {
+            pushMessage({ isSystem: true, text: `🔌 ${event.user_name} lost connection` });
+          }
+          setRoom((prev) => {
+            if (!prev) return prev;
+            const newMembers = prev.members.filter((m) => m.user !== event.user_id);
+            const nowReady = newMembers.length <= 1 || newMembers.every((m) => m.is_ready);
+            setAllReady(nowReady);
+            return { ...prev, members: newMembers };
           });
           break;
 
@@ -240,7 +329,6 @@ const RoomPage = () => {
             isPlayingRef.current = true;
             hasPlayedRef.current = true;
             blockNetworkWaitUntilRef.current = Date.now() + 5000;
-            // ✅ Bug 5 fix: start SYNC_TIME broadcast after allReady auto-play
             startSyncBroadcast(sendRef.current);
           }
           break;
@@ -324,56 +412,6 @@ const RoomPage = () => {
           }
           break;
 
-        case "MEMBER_DISCONNECTED":
-          blockedRef.current = false;
-          if (videoRef.current && !videoRef.current.paused) {
-            applyRemote(() => videoRef.current.pause());
-            isPlayingRef.current = false;
-          }
-          stopSyncBroadcast();
-          setPausedBy(`${event.user_name} left`);
-          setPausedById(null);
-          setWaiting(false);
-          setWaitingFor("");
-          if (networkWaitTimer.current) {
-            clearTimeout(networkWaitTimer.current);
-            networkWaitTimer.current = null;
-          }
-          setRoom((prev) => {
-            if (!prev) return prev;
-            const newMembers = prev.members.filter((m) => m.user !== event.user_id);
-            const nowReady = newMembers.length <= 1 || newMembers.every((m) => m.is_ready);
-            setAllReady(nowReady);
-            return { ...prev, members: newMembers };
-          });
-          break;
-
-        case "MEMBER_LEFT":
-          setWaiting(false);
-          setWaitingFor("");
-          iSentNetworkWaitRef.current = false;
-          setRoom((prev) => {
-            if (!prev) return prev;
-            const newMembers = prev.members.filter((m) => m.user !== event.user_id);
-            const nowReady = newMembers.length <= 1 || newMembers.every((m) => m.is_ready);
-            setAllReady(nowReady);
-            return { ...prev, members: newMembers };
-          });
-          break;
-
-        case "MEMBER_JOINED":
-          refreshRoom();
-          if (hasPlayedRef.current && videoRef.current) {
-            setTimeout(() => {
-              sendRef.current?.({
-                type: "SYNC_STATE",
-                timestamp: videoRef.current?.currentTime || 0,
-                is_playing: !videoRef.current?.paused,
-              });
-            }, 1500);
-          }
-          break;
-
         case "SYNC_STATE":
           if (event.sender_id === myId) break;
           applyRemote(() => {
@@ -383,7 +421,6 @@ const RoomPage = () => {
                 videoRef.current.play().catch(() => {});
                 isPlayingRef.current = true;
                 hasPlayedRef.current = true;
-                // ✅ Bug 6 fix: new joiner starts broadcasting SYNC_TIME
                 startSyncBroadcast(sendRef.current);
               }
             }
@@ -450,8 +487,6 @@ const RoomPage = () => {
 
   const handleLeave = async () => {
     stopSyncBroadcast();
-    // ✅ Bug 4 fix: send LEAVE_ROOM BEFORE REST call so
-    // check_membership sees removal → disconnect won't broadcast MEMBER_DISCONNECTED
     send({ type: "LEAVE_ROOM" });
     try { await authAxios.post(`/api/rooms/${id}/leave/`); } catch (_err) {}
     navigate("/dashboard");
@@ -555,8 +590,6 @@ const RoomPage = () => {
 
   useEffect(() => () => stopSyncBroadcast(), []);
 
-  // ChatInput is defined at module level — see top of file
-
   // ── Voice controls component ───────────────────────────────
   const VoiceControls = () => (
     <>
@@ -567,7 +600,7 @@ const RoomPage = () => {
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               isMuted
                 ? "bg-gray-800 text-gray-400 hover:bg-gray-700"
-                : "bg-violet-600 text-white hover:bg-violet-700"
+                : "bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-900/20"
             }`}
           >
             {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
@@ -578,7 +611,7 @@ const RoomPage = () => {
             <span className="hidden sm:inline ml-1">Leave Call</span>
           </Button>
           {Object.keys(remoteStreams).length > 0 && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs font-medium text-gray-400 bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700">
               🎙 {Object.keys(remoteStreams).length} connected
             </span>
           )}
@@ -611,7 +644,7 @@ const RoomPage = () => {
   if (!isMember)
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white px-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 w-full max-w-sm text-center">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 w-full max-w-sm text-center shadow-2xl">
           <h2 className="text-xl font-bold mb-2">{room?.name}</h2>
           <p className="text-gray-400 text-sm mb-6">Enter the room password to join</p>
           {joinError && (
@@ -625,7 +658,7 @@ const RoomPage = () => {
             onChange={(e) => setJoinPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleJoin()}
             placeholder="Room password"
-            className="w-full bg-gray-800 border border-gray-700 focus:border-violet-500 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 text-sm outline-none mb-4"
+            className="w-full bg-gray-950 border border-gray-800 focus:border-violet-500 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm outline-none mb-5 shadow-inner transition-colors"
           />
           <div className="flex gap-3">
             <Button variant="secondary" fullWidth onClick={() => navigate("/dashboard")}>Cancel</Button>
@@ -642,22 +675,22 @@ const RoomPage = () => {
       <div className="flex flex-col flex-1 min-w-0 min-h-0">
 
         {/* Top bar */}
-        <div className="flex items-center justify-between px-3 py-2 md:px-4 md:py-3 bg-gray-900 border-b border-gray-800 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <h1 className="font-semibold text-sm md:text-base shrink-0 truncate max-w-[120px] md:max-w-none">
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800/80 shrink-0 shadow-sm z-10">
+          <div className="flex items-center gap-3 min-w-0">
+            <h1 className="font-semibold text-sm md:text-base shrink-0 truncate max-w-[140px] md:max-w-none">
               {room?.name}
             </h1>
             {room?.video_detail && (
-              <span className="text-xs md:text-sm text-gray-400 truncate hidden sm:block">
-                — {room.video_detail.title}
+              <span className="text-xs md:text-sm text-gray-400 truncate hidden sm:block bg-gray-800 px-2.5 py-1 rounded-md border border-gray-700">
+                {room.video_detail.title}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             {isHost && (
               <Button size="sm" variant="secondary" onClick={loadMyVideos}>
-                <Settings size={13} />
-                <span className="hidden sm:inline ml-1">Select Video</span>
+                <Settings size={14} />
+                <span className="hidden sm:inline ml-1.5">Select Video</span>
               </Button>
             )}
             <Button
@@ -665,21 +698,21 @@ const RoomPage = () => {
               variant={isReady ? "secondary" : "primary"}
               onClick={toggleReady}
             >
-              {isReady ? <CheckCircle size={13} /> : <Circle size={13} />}
-              <span className="ml-1 text-xs md:text-sm">{isReady ? "Ready!" : "Ready?"}</span>
+              {isReady ? <CheckCircle size={14} /> : <Circle size={14} />}
+              <span className="ml-1.5 text-xs md:text-sm font-medium">{isReady ? "Ready!" : "Ready?"}</span>
             </Button>
             <Button size="sm" variant="danger" onClick={handleLeave}>
-              <LogOut size={13} />
-              <span className="hidden sm:inline ml-1">Leave</span>
+              <LogOut size={14} />
+              <span className="hidden sm:inline ml-1.5">Leave</span>
             </Button>
           </div>
         </div>
 
         {/* Player — takes all remaining vertical space */}
-        <div className="relative bg-black overflow-hidden" style={{ flex: "1 1 0", minHeight: 0 }}>
+        <div className="relative bg-black overflow-hidden shadow-inner" style={{ flex: "1 1 0", minHeight: 0 }}>
           {room?.video_detail?.master_url ? (
             <>
-              {/* ✅ Chat overlay + status overlays passed as children → visible in fullscreen */}
+              {/* ✅ Overlays are passed to VideoPlayer as children, guaranteeing visibility in full-screen */}
               <VideoPlayer
                 masterUrl={room.video_detail.master_url}
                 videoRef={videoRef}
@@ -691,13 +724,14 @@ const RoomPage = () => {
                 onBuffer={handleBuffer}
                 onBufferEnd={handleBufferEnd}
               >
-                {/* Chat overlay — temporary flash when someone sends a message, visible in fullscreen */}
+                {/* Chat & System Notifications overlay */}
                 <ChatOverlay messages={overlayMsgs} />
 
                 {/* Paused-by banner */}
                 {pausedBy && (
-                  <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 text-white text-sm px-4 py-2 rounded-full z-10 whitespace-nowrap pointer-events-none">
-                    ⏸ {pausedBy}
+                  <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-md border border-white/10 text-white text-sm px-5 py-2.5 rounded-full z-10 whitespace-nowrap pointer-events-none shadow-xl flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    Paused by {pausedBy}
                     {pausedById && pausedById !== String(user?.id)
                       ? " — waiting for them to resume"
                       : ""}
@@ -706,25 +740,28 @@ const RoomPage = () => {
 
                 {/* Network wait overlay */}
                 {waiting && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20 pointer-events-none">
-                    <div className="bg-gray-900 rounded-xl px-6 py-4 text-center">
-                      <div className="animate-spin w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full mx-auto mb-3" />
-                      <p className="text-sm">Waiting for {waitingFor}...</p>
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-20 pointer-events-none transition-all">
+                    <div className="bg-gray-900/90 border border-gray-800 rounded-2xl px-8 py-6 text-center shadow-2xl">
+                      <div className="animate-spin w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full mx-auto mb-4" />
+                      <p className="text-sm font-medium text-gray-200">Waiting for {waitingFor}...</p>
                     </div>
                   </div>
                 )}
 
                 {/* Ready gate overlay */}
                 {!allReady && (
-                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-20">
-                    <div className="bg-gray-900 rounded-xl px-6 md:px-8 py-6 text-center mx-4">
-                      <h2 className="text-base md:text-lg font-semibold mb-2">
+                  <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-20">
+                    <div className="bg-gray-900/95 border border-gray-800 rounded-3xl px-8 md:px-10 py-8 text-center mx-4 shadow-2xl max-w-sm w-full">
+                      <div className="w-16 h-16 bg-violet-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Users size={32} className="text-violet-400" />
+                      </div>
+                      <h2 className="text-lg md:text-xl font-bold mb-2">
                         Waiting for everyone
                       </h2>
-                      <p className="text-gray-400 text-sm mb-4">
-                        All members must be ready before playback starts
+                      <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+                        All members must click "Ready" before playback begins
                       </p>
-                      <Button onClick={toggleReady} variant={isReady ? "secondary" : "primary"}>
+                      <Button fullWidth onClick={toggleReady} variant={isReady ? "secondary" : "primary"}>
                         {isReady ? "✓ You are ready" : "I am Ready"}
                       </Button>
                     </div>
@@ -734,11 +771,11 @@ const RoomPage = () => {
             </>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-600">
-              <div className="text-center">
-                <Video size={48} className="mx-auto mb-3 opacity-30" />
-                <p>No video selected</p>
+              <div className="text-center bg-gray-900/50 p-8 rounded-3xl border border-gray-800 border-dashed">
+                <Video size={48} className="mx-auto mb-4 opacity-30" />
+                <p className="font-medium text-gray-400">No video selected</p>
                 {isHost && (
-                  <Button size="sm" className="mt-3" onClick={loadMyVideos}>
+                  <Button size="sm" className="mt-4" onClick={loadMyVideos}>
                     Select a Video
                   </Button>
                 )}
@@ -748,31 +785,33 @@ const RoomPage = () => {
         </div>
 
         {/* Voice controls bar */}
-        <div className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 bg-gray-900 border-t border-gray-800 shrink-0 flex-wrap">
+        <div className="flex items-center gap-3 px-4 py-3 bg-gray-900 border-t border-gray-800/80 shrink-0 flex-wrap z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
           <VoiceControls />
         </div>
       </div>
 
       {/* ── Sidebar — desktop only ─────────────────────────── */}
-      <div className="hidden md:flex w-72 flex-col bg-gray-900 border-l border-gray-800 shrink-0">
-        <div className="p-4 border-b border-gray-800">
-          <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">
-            Members ({room?.members?.length || 0}/{room?.max_members})
+      <div className="hidden md:flex w-80 flex-col bg-gray-900 border-l border-gray-800/80 shrink-0 shadow-2xl z-20">
+        <div className="p-5 border-b border-gray-800">
+          <h3 className="text-[11px] font-bold text-gray-400 mb-3 uppercase tracking-wider">
+            Members In Room ({room?.members?.length || 0}/{room?.max_members})
           </h3>
-          {room?.members?.map((member) => (
-            <MemberItem
-              key={member.id}
-              member={member}
-              isHost={isHost}
-              onRemove={removeMember}
-              currentUserId={user?.id}
-            />
-          ))}
+          <div className="flex flex-col gap-1">
+            {room?.members?.map((member) => (
+              <MemberItem
+                key={member.id}
+                member={member}
+                isHost={isHost}
+                onRemove={removeMember}
+                currentUserId={user?.id}
+              />
+            ))}
+          </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="px-4 py-3 border-b border-gray-800 shrink-0">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Chat</h3>
+        <div className="flex-1 flex flex-col min-h-0 bg-gray-900">
+          <div className="px-5 py-3 border-b border-gray-800 shrink-0 bg-gray-900/50">
+            <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Live Chat</h3>
           </div>
           <ChatPanel
             messages={chatMessages}
@@ -790,35 +829,35 @@ const RoomPage = () => {
         <div className="flex border-b border-gray-800 shrink-0">
           <button
             onClick={() => setMobileTab("chat")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-semibold transition-colors ${
               mobileTab === "chat"
-                ? "text-violet-400 border-b-2 border-violet-500"
-                : "text-gray-500 hover:text-gray-300"
+                ? "text-violet-400 border-b-2 border-violet-500 bg-violet-500/5"
+                : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/50"
             }`}
           >
-            <MessageSquare size={13} /> Chat
+            <MessageSquare size={14} /> Chat
             {chatMessages.length > 0 && (
-              <span className="bg-violet-600 text-white text-[10px] rounded-full px-1.5 py-0.5 ml-0.5">
+              <span className="bg-violet-600 text-white text-[10px] rounded-full px-1.5 py-0.5 ml-0.5 shadow">
                 {chatMessages.length}
               </span>
             )}
           </button>
           <button
             onClick={() => setMobileTab("members")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-semibold transition-colors ${
               mobileTab === "members"
-                ? "text-violet-400 border-b-2 border-violet-500"
-                : "text-gray-500 hover:text-gray-300"
+                ? "text-violet-400 border-b-2 border-violet-500 bg-violet-500/5"
+                : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/50"
             }`}
           >
-            <Users size={13} />
+            <Users size={14} />
             Members ({room?.members?.length || 0})
           </button>
         </div>
 
         {/* Tab content */}
         {mobileTab === "chat" ? (
-          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex flex-col flex-1 min-h-0 bg-gray-950">
             <ChatPanel
               messages={chatMessages}
               chatInput={chatInput}
@@ -828,7 +867,7 @@ const RoomPage = () => {
             />
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-3">
+          <div className="flex-1 overflow-y-auto p-4 bg-gray-950 flex flex-col gap-2">
             {room?.members?.map((member) => (
               <MemberItem
                 key={member.id}
@@ -844,27 +883,28 @@ const RoomPage = () => {
 
       {/* ── Select Video Modal ─────────────────────────────── */}
       {selectingVideo && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-md">
-            <h2 className="font-semibold mb-4">Select Video</h2>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] px-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h2 className="font-bold text-lg mb-4 text-white">Select Video</h2>
             {myVideos.length === 0 ? (
-              <p className="text-gray-500 text-sm">No ready videos found.</p>
+              <div className="bg-gray-950 rounded-xl p-6 text-center border border-gray-800">
+                <p className="text-gray-400 text-sm">No ready videos found.</p>
+              </div>
             ) : (
-              <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
+              <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
                 {myVideos.map((video) => (
                   <button
                     key={video.id}
                     onClick={() => selectVideo(video.id)}
-                    className="text-left px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+                    className="text-left px-4 py-3 bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 hover:border-violet-500/50 rounded-xl transition-all"
                   >
-                    <p className="text-sm font-medium">{video.title}</p>
-                    {/* Bug 9 fix: show all available resolutions including 480p */}
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {video.url_360p  && "360p "}
-                      {video.url_480p  && "480p "}
-                      {video.url_720p  && "720p "}
-                      {video.url_1080p && "1080p"}
-                    </p>
+                    <p className="text-sm font-semibold text-gray-100">{video.title}</p>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      {video.url_360p  && <span className="bg-gray-900 text-gray-400 text-[10px] px-1.5 py-0.5 rounded">360p</span>}
+                      {video.url_480p  && <span className="bg-gray-900 text-gray-400 text-[10px] px-1.5 py-0.5 rounded">480p</span>}
+                      {video.url_720p  && <span className="bg-gray-900 text-gray-400 text-[10px] px-1.5 py-0.5 rounded">720p</span>}
+                      {video.url_1080p && <span className="bg-violet-900/50 text-violet-300 text-[10px] px-1.5 py-0.5 rounded border border-violet-500/30">1080p</span>}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -872,7 +912,7 @@ const RoomPage = () => {
             <Button
               variant="secondary"
               fullWidth
-              className="mt-4"
+              className="mt-5"
               onClick={() => setSelectingVideo(false)}
             >
               Cancel
