@@ -54,7 +54,7 @@ const ChatOverlay = ({ messages }) => {
 // ── Chat panel (messages list + input) ──
 const ChatPanel = ({ messages, chatInput, setChatInput, onSend, endRef }) => (
   <>
-    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 min-h-0 scroll-smooth">
+    <div className="flex-1 overflow-y-auto p-3 md:p-4 flex flex-col gap-2.5 md:gap-3 min-h-0 scroll-smooth">
       {messages.map((msg) => (
         <div key={msg.id} className={msg.isSystem ? "flex justify-center my-1" : "flex flex-col"}>
           {msg.isSystem ? (
@@ -73,18 +73,18 @@ const ChatPanel = ({ messages, chatInput, setChatInput, onSend, endRef }) => (
       ))}
       <div ref={endRef} />
     </div>
-    <div className="p-3 border-t border-gray-800/80 bg-gray-900/50 flex gap-2 shrink-0">
+    <div className="p-2.5 md:p-3 border-t border-gray-800/80 bg-gray-900/50 flex gap-2 shrink-0">
       <input
         type="text"
         value={chatInput}
         onChange={(e) => setChatInput(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && onSend()}
         placeholder="Say something..."
-        className="flex-1 bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 outline-none focus:border-violet-500 transition-colors shadow-inner"
+        className="flex-1 bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 md:px-4 md:py-2.5 text-sm text-white placeholder-gray-600 outline-none focus:border-violet-500 transition-colors shadow-inner"
       />
       <button
         onClick={onSend}
-        className="p-2.5 bg-violet-600 hover:bg-violet-500 rounded-xl transition-colors shrink-0 shadow-lg shadow-violet-900/20"
+        className="p-2 md:p-2.5 bg-violet-600 hover:bg-violet-500 rounded-xl transition-colors shrink-0 shadow-lg shadow-violet-900/20"
       >
         <Send size={16} />
       </button>
@@ -672,11 +672,11 @@ const RoomPage = () => {
     <div className="flex flex-col md:flex-row h-screen bg-gray-950 text-white overflow-hidden">
 
       {/* ── Video area ─────────────────────────────────────── */}
-      <div className="flex flex-col flex-1 min-w-0 min-h-0">
+      <div className="flex flex-col flex-none md:flex-1 w-full min-w-0 md:min-h-0 shrink-0">
 
         {/* Top bar */}
-        <div className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800/80 shrink-0 shadow-sm z-10">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-between px-3 md:px-4 py-2.5 md:py-3 bg-gray-900 border-b border-gray-800/80 shrink-0 shadow-sm z-10">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
             <h1 className="font-semibold text-sm md:text-base shrink-0 truncate max-w-[140px] md:max-w-none">
               {room?.name}
             </h1>
@@ -708,8 +708,8 @@ const RoomPage = () => {
           </div>
         </div>
 
-        {/* Player — takes all remaining vertical space */}
-        <div className="relative bg-black overflow-hidden shadow-inner" style={{ flex: "1 1 0", minHeight: 0 }}>
+        {/* Player — takes all remaining vertical space on desktop, aspect ratio 16:9 on mobile */}
+        <div className="relative bg-black overflow-hidden shadow-inner md:flex-1 w-full aspect-video md:aspect-auto shrink-0 min-h-0">
           {room?.video_detail?.master_url ? (
             <>
               {/* ✅ Overlays are passed to VideoPlayer as children, guaranteeing visibility in full-screen */}
@@ -785,7 +785,7 @@ const RoomPage = () => {
         </div>
 
         {/* Voice controls bar */}
-        <div className="flex items-center gap-3 px-4 py-3 bg-gray-900 border-t border-gray-800/80 shrink-0 flex-wrap z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+        <div className="flex items-center gap-2 md:gap-3 px-3 py-2.5 md:px-4 md:py-3 bg-gray-900 border-t border-gray-800/80 shrink-0 flex-wrap z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
           <VoiceControls />
         </div>
       </div>
@@ -824,18 +824,18 @@ const RoomPage = () => {
       </div>
 
       {/* ── Mobile bottom panel ────────────────────────────── */}
-      <div className="md:hidden flex flex-col bg-gray-900 border-t border-gray-800 shrink-0" style={{ height: "45vw", maxHeight: "300px" }}>
+      <div className="md:hidden flex flex-col bg-gray-900 flex-1 min-h-0 z-20">
         {/* Tabs */}
-        <div className="flex border-b border-gray-800 shrink-0">
+        <div className="flex border-b border-gray-800 shrink-0 shadow-sm">
           <button
             onClick={() => setMobileTab("chat")}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-semibold transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors ${
               mobileTab === "chat"
                 ? "text-violet-400 border-b-2 border-violet-500 bg-violet-500/5"
-                : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/50"
+                : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/50"
             }`}
           >
-            <MessageSquare size={14} /> Chat
+            <MessageSquare size={16} /> Chat
             {chatMessages.length > 0 && (
               <span className="bg-violet-600 text-white text-[10px] rounded-full px-1.5 py-0.5 ml-0.5 shadow">
                 {chatMessages.length}
@@ -844,13 +844,13 @@ const RoomPage = () => {
           </button>
           <button
             onClick={() => setMobileTab("members")}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-semibold transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors ${
               mobileTab === "members"
                 ? "text-violet-400 border-b-2 border-violet-500 bg-violet-500/5"
-                : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/50"
+                : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/50"
             }`}
           >
-            <Users size={14} />
+            <Users size={16} />
             Members ({room?.members?.length || 0})
           </button>
         </div>
