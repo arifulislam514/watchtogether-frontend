@@ -311,8 +311,8 @@ const UploadModal = ({ onClose, onUploaded }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <Card className="w-full max-w-md">
+    <div className="fixed inset-0 bg-black/60 flex items-start sm:items-center justify-center z-50 overflow-y-auto p-4">
+      <Card className="w-full max-w-md my-auto">
         <h2 className="text-lg font-semibold mb-6">Upload Video</h2>
 
         {error && (

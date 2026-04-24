@@ -152,7 +152,7 @@ const DashboardPage = () => {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold">
             Welcome back{profile ? `, ${profile.name}` : ''}! 👋
@@ -164,7 +164,7 @@ const DashboardPage = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-8 max-w-sm">
+      <div className="grid grid-cols-2 gap-4 mb-8 w-full sm:max-w-sm">
         <Card className="text-center">
           <p className="text-2xl font-bold text-violet-400">{rooms.length}</p>
           <p className="text-sm text-gray-400">Your Rooms</p>

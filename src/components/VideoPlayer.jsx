@@ -64,6 +64,7 @@ const VideoPlayer = ({
   videoRef: externalRef,
   isSyncingRef,
   blockedRef,
+  children,   // ✅ overlays rendered inside container — visible in fullscreen
 }) => {
   const internalRef  = useRef(null)
   const videoRef     = externalRef || internalRef
@@ -79,6 +80,7 @@ const VideoPlayer = ({
 
   const [seekIndicator,  setSeekIndicator]  = useState(null)
   const seekTimer  = useRef(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const lastTapRef = useRef({ side: null, time: 0 })
 
   // ── Load HLS ───────────────────────────────────────────────
@@ -119,8 +121,19 @@ const VideoPlayer = ({
       videoRef.current.src = fullUrl
     }
 
-    return () => { hlsRef.current?.destroy(); hlsRef.current = null }
+    return () => {
+      hlsRef.current?.destroy()
+      hlsRef.current = null
+      if (seekTimer.current) clearTimeout(seekTimer.current)
+    }
   }, [masterUrl])
+
+  // ── Track fullscreen state ────────────────────────────────
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
 
   // ── Keyboard controls ──────────────────────────────────────
   useEffect(() => {
@@ -270,6 +283,9 @@ const VideoPlayer = ({
         onCanPlay={onBufferEnd}
       />
 
+      {/* ✅ Children rendered inside container — visible in fullscreen */}
+      {children}
+
       {/* ── Double-tap indicators ──────────────────────────── */}
       {seekIndicator === 'left' && (
         <div className="absolute left-6 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-3 flex items-center gap-0.5 pointer-events-none">
@@ -287,7 +303,7 @@ const VideoPlayer = ({
       )}
 
       {/* ── Controls overlay — bottom-right above native controls ── */}
-      <div className="absolute bottom-14 right-3 flex items-center gap-1.5">
+      <div className={`absolute ${isFullscreen ? "bottom-16" : "bottom-14"} right-3 flex items-center gap-1.5`}>
 
         {/* Quality */}
         {levels.length > 0 && (
@@ -301,7 +317,7 @@ const VideoPlayer = ({
         )}
 
         {/* Audio tracks */}
-        {audioTracks.length >= 1 && (
+        {audioTracks.length > 1 && (
           <TrackMenu
             label={audioLabel()}
             icon="♪"
