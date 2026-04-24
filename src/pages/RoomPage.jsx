@@ -13,20 +13,57 @@ import useWebRTC from "../hooks/useWebRTC";
 import VideoPlayer from "../components/VideoPlayer";
 import Button from "../components/ui/Button";
 
-// ── Chat overlay — rendered inside VideoPlayer (visible in fullscreen) ──
-const ChatOverlay = ({ messages }) => (
-  <div className="absolute bottom-16 left-4 flex flex-col gap-1 pointer-events-none z-10">
-    {messages.slice(-4).map((msg, i) => (
-      <div
-        key={i}
-        className="bg-black/60 text-white text-sm px-3 py-1 rounded-lg backdrop-blur-sm"
+// ── Chat overlay — rendered inside VideoPlayer container (visible in fullscreen) ──
+// Shows last 4 persistent chat messages so they're always visible in fullscreen
+const ChatOverlay = ({ messages }) => {
+  if (!messages.length) return null
+  return (
+    <div className="absolute bottom-16 left-3 flex flex-col gap-1 pointer-events-none z-10 max-w-xs">
+      {messages.slice(-4).map((msg, i) => (
+        <div
+          key={i}
+          className="bg-black/70 text-white text-sm px-3 py-1.5 rounded-lg backdrop-blur-sm"
+        >
+          <span className="text-violet-400 font-semibold text-xs">{msg.user_name}: </span>
+          <span className="text-xs">{msg.text}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Chat panel (messages list + input) — defined at MODULE level to prevent remount ──
+// ⚠️ MUST be outside RoomPage — if defined inside, React remounts on every render
+// causing the input to lose focus after every single character typed.
+const ChatPanel = ({ messages, chatInput, setChatInput, onSend, endRef }) => (
+  <>
+    <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 min-h-0">
+      {messages.map((msg, i) => (
+        <div key={i}>
+          <span className="text-violet-400 text-xs font-medium">{msg.user_name}</span>
+          <p className="text-sm text-gray-300 break-words">{msg.text}</p>
+        </div>
+      ))}
+      <div ref={endRef} />
+    </div>
+    <div className="p-3 border-t border-gray-800 flex gap-2 shrink-0">
+      <input
+        type="text"
+        value={chatInput}
+        onChange={(e) => setChatInput(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && onSend()}
+        placeholder="Say something..."
+        className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-violet-500"
+      />
+      <button
+        onClick={onSend}
+        className="p-2 bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors shrink-0"
       >
-        <span className="text-violet-400 font-medium">{msg.user_name}: </span>
-        {msg.text}
-      </div>
-    ))}
-  </div>
-);
+        <Send size={14} />
+      </button>
+    </div>
+  </>
+)
 
 const MemberItem = ({ member, isHost, onRemove, currentUserId }) => (
   <div className="flex items-center justify-between py-2">
@@ -509,36 +546,7 @@ const RoomPage = () => {
 
   useEffect(() => () => stopSyncBroadcast(), []);
 
-  // ── Shared chat input component ────────────────────────────
-  const ChatInput = ({ endRef }) => (
-    <>
-      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-        {chatMessages.map((msg, i) => (
-          <div key={i}>
-            <span className="text-violet-400 text-xs font-medium">{msg.user_name}</span>
-            <p className="text-sm text-gray-300 break-words">{msg.text}</p>
-          </div>
-        ))}
-        <div ref={endRef} />
-      </div>
-      <div className="p-3 border-t border-gray-800 flex gap-2">
-        <input
-          type="text"
-          value={chatInput}
-          onChange={(e) => setChatInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendChat()}
-          placeholder="Say something..."
-          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-violet-500"
-        />
-        <button
-          onClick={sendChat}
-          className="p-2 bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors shrink-0"
-        >
-          <Send size={14} />
-        </button>
-      </div>
-    </>
-  );
+  // ChatInput is defined at module level — see top of file
 
   // ── Voice controls component ───────────────────────────────
   const VoiceControls = () => (
@@ -674,8 +682,8 @@ const RoomPage = () => {
                 onBuffer={handleBuffer}
                 onBufferEnd={handleBufferEnd}
               >
-                {/* Chat overlay — visible in fullscreen */}
-                <ChatOverlay messages={overlayMsgs} />
+                {/* Chat overlay — shows last 4 messages, always visible in fullscreen */}
+                <ChatOverlay messages={chatMessages} />
 
                 {/* Paused-by banner */}
                 {pausedBy && (
@@ -754,10 +762,16 @@ const RoomPage = () => {
         </div>
 
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="px-4 py-3 border-b border-gray-800">
+          <div className="px-4 py-3 border-b border-gray-800 shrink-0">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Chat</h3>
           </div>
-          <ChatInput endRef={chatEndRef} />
+          <ChatPanel
+            messages={chatMessages}
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            onSend={sendChat}
+            endRef={chatEndRef}
+          />
         </div>
       </div>
 
@@ -796,7 +810,13 @@ const RoomPage = () => {
         {/* Tab content */}
         {mobileTab === "chat" ? (
           <div className="flex flex-col flex-1 min-h-0">
-            <ChatInput endRef={chatEndMobileRef} />
+            <ChatPanel
+              messages={chatMessages}
+              chatInput={chatInput}
+              setChatInput={setChatInput}
+              onSend={sendChat}
+              endRef={chatEndMobileRef}
+            />
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-3">
