@@ -1,52 +1,72 @@
 // src/components/VideoPlayer.jsx
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Hls from 'hls.js'
-// ✅ Added Maximize and Minimize icons
-import { ChevronRight, ChevronLeft, ChevronDown, Check, Maximize, Minimize } from 'lucide-react'
+import { ChevronRight, ChevronLeft, ChevronDown, Check, Maximize, Minimize, RotateCw } from 'lucide-react'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
 
 // ── Small dropdown used for Quality / Audio / Subtitle ────
-const TrackMenu = ({ label, icon, items, activeIndex, onChange, accentWhenActive = false }) => {
+const TrackMenu = ({ label, icon, items, activeIndex, onChange, accentWhenActive = false, onToggle }) => {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
   // Close on outside click
   useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    const handler = (e) => { 
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false)
+        onToggle?.(false)
+      }
+    }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+    document.addEventListener('touchstart', handler) // Added for mobile
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler)
+    }
+  }, [onToggle])
+
+  const handleToggle = (e) => {
+    e.stopPropagation()
+    const newState = !open
+    setOpen(newState)
+    onToggle?.(newState)
+  }
 
   const isActive = accentWhenActive && activeIndex >= 0
 
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
-        className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors border backdrop-blur-sm ${
+        onClick={handleToggle}
+        className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-full font-medium transition-all duration-200 backdrop-blur-md ${
           isActive
-            ? 'bg-violet-600 border-violet-500 text-white'
-            : 'bg-black/75 border-white/15 text-white hover:bg-black/90'
+            ? 'bg-violet-600/90 text-white shadow-lg shadow-violet-900/20'
+            : 'bg-black/40 text-white/90 hover:bg-black/60 hover:text-white'
         }`}
       >
-        <span>{icon}</span>
-        <span className="max-w-[56px] truncate">{label}</span>
-        <ChevronDown size={10} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="opacity-80">{icon}</span>
+        <span className="max-w-[64px] truncate">{label}</span>
+        <ChevronDown size={12} className={`transition-transform duration-300 opacity-70 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
-        <div className="absolute right-0 bottom-[calc(100%+6px)] bg-gray-950 border border-gray-700 rounded-xl overflow-hidden z-40 min-w-[130px] shadow-2xl">
+        <div className="absolute right-0 bottom-[calc(100%+8px)] bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden z-50 min-w-[140px] shadow-2xl py-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
           {items.map((item, i) => (
             <button
               key={i}
-              onClick={(e) => { e.stopPropagation(); onChange(item.value); setOpen(false) }}
-              className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between hover:bg-gray-800 transition-colors ${
-                item.value === activeIndex ? 'text-violet-400 font-semibold' : 'text-gray-200'
+              onClick={(e) => { 
+                e.stopPropagation()
+                onChange(item.value)
+                setOpen(false)
+                onToggle?.(false)
+              }}
+              className={`w-full text-left px-4 py-3 text-xs flex items-center justify-between hover:bg-white/10 transition-colors ${
+                item.value === activeIndex ? 'text-violet-400 font-medium' : 'text-gray-300'
               }`}
             >
               <span>{item.label}</span>
-              {item.value === activeIndex && <Check size={11} className="text-violet-400 shrink-0" />}
+              {item.value === activeIndex && <Check size={14} className="text-violet-400 shrink-0" />}
             </button>
           ))}
         </div>
@@ -81,8 +101,30 @@ const VideoPlayer = ({
 
   const [seekIndicator,  setSeekIndicator]  = useState(null)
   const seekTimer  = useRef(null)
+  
   const [isFullscreen, setIsFullscreen] = useState(false)
   const lastTapRef = useRef({ side: null, time: 0 })
+
+  // ✅ New UI States
+  const [isIdle, setIsIdle] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const idleTimeout = useRef(null)
+
+  // ── Idle/Auto-hide logic ──────────────────────────────────
+  const resetIdleTimer = useCallback(() => {
+    setIsIdle(false)
+    if (idleTimeout.current) clearTimeout(idleTimeout.current)
+    
+    // Don't auto-hide if a menu is open or video is paused
+    if (!isMenuOpen && !videoRef.current?.paused) {
+      idleTimeout.current = setTimeout(() => setIsIdle(true), 3000)
+    }
+  }, [isMenuOpen])
+
+  useEffect(() => {
+    resetIdleTimer()
+    return () => { if (idleTimeout.current) clearTimeout(idleTimeout.current) }
+  }, [resetIdleTimer])
 
   // ── Load HLS ───────────────────────────────────────────────
   useEffect(() => {
@@ -118,7 +160,7 @@ const VideoPlayer = ({
     }
   }, [masterUrl])
 
-  // ── Fullscreen handling ───────────────────────────────────
+  // ── Fullscreen & Rotation ──────────────────────────────────
   useEffect(() => {
     const video = videoRef.current
     const container = containerRef.current
@@ -143,23 +185,56 @@ const VideoPlayer = ({
     }
   }, [])
 
-  // ✅ Robust manual fullscreen toggle logic
-  const toggleFullscreen = useCallback(() => {
+  const toggleFullscreen = useCallback(async () => {
     const container = containerRef.current
     if (!container) return
 
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-      if (document.exitFullscreen) document.exitFullscreen()
-      else if (document.webkitExitFullscreen) document.webkitExitFullscreen()
-    } else {
-      if (container.requestFullscreen) container.requestFullscreen()
-      else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen()
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        if (document.exitFullscreen) await document.exitFullscreen()
+        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen()
+        
+        // Optional: Unlock orientation when exiting fullscreen
+        if (screen.orientation && screen.orientation.unlock) {
+          screen.orientation.unlock()
+        }
+      } else {
+        if (container.requestFullscreen) await container.requestFullscreen()
+        else if (container.webkitRequestFullscreen) await container.webkitRequestFullscreen()
+      }
+    } catch (err) {
+      console.warn("Fullscreen error:", err)
     }
   }, [])
+
+  // ✅ Force landscape rotation (Mobile)
+  const handleRotate = async (e) => {
+    e.stopPropagation()
+    try {
+      // Browsers usually require fullscreen to lock orientation
+      if (!document.fullscreenElement) {
+        await toggleFullscreen()
+      }
+      
+      if (screen.orientation && screen.orientation.lock) {
+        const currentType = screen.orientation.type
+        if (currentType.startsWith('portrait')) {
+          await screen.orientation.lock('landscape')
+        } else {
+          await screen.orientation.lock('portrait')
+        }
+      } else {
+        console.warn("Screen orientation API not supported by this browser.")
+      }
+    } catch (err) {
+      console.warn("Could not lock screen orientation. The browser might be blocking it.", err)
+    }
+  }
 
   // ── Keyboard controls ──────────────────────────────────────
   useEffect(() => {
     const onKey = (e) => {
+      resetIdleTimer() // Wake up UI on keypress
       const tag = document.activeElement?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
       if (!videoRef.current) return
@@ -182,7 +257,7 @@ const VideoPlayer = ({
         case 'ArrowDown': e.preventDefault(); videoRef.current.volume = Math.max(0, videoRef.current.volume - 0.1); break
         case 'f': case 'F':
           e.preventDefault()
-          toggleFullscreen() // ✅ Centralized
+          toggleFullscreen()
           break
         case 'm': case 'M':
           e.preventDefault()
@@ -192,7 +267,7 @@ const VideoPlayer = ({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [toggleFullscreen])
+  }, [toggleFullscreen, resetIdleTimer])
 
   const flash = (side) => {
     setSeekIndicator(side)
@@ -202,6 +277,7 @@ const VideoPlayer = ({
 
   // ── Double-tap seek (mobile) ───────────────────────────────
   const handleTouchEnd = useCallback((e) => {
+    resetIdleTimer() // Wake up UI on touch
     if (!videoRef.current) return
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -221,11 +297,15 @@ const VideoPlayer = ({
     } else {
       lastTapRef.current = { side, time: now }
     }
-  }, [])
+  }, [resetIdleTimer])
 
   // ── Video event handlers ───────────────────────────────────
-  const handlePause  = () => { if (!isSyncingRef?.current) onPause?.(videoRef.current?.currentTime  || 0) }
+  const handlePause  = () => { 
+    resetIdleTimer() // Keep UI visible when paused
+    if (!isSyncingRef?.current) onPause?.(videoRef.current?.currentTime  || 0) 
+  }
   const handlePlay   = () => {
+    resetIdleTimer()
     if (isSyncingRef?.current) return
     if (blockedRef?.current) {
       isSyncingRef.current = true
@@ -280,23 +360,22 @@ const VideoPlayer = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full bg-black select-none"
-      onClick={() => {}}
+      className="relative w-full h-full bg-black select-none overflow-hidden group"
+      onMouseMove={resetIdleTimer}
+      onTouchStart={resetIdleTimer}
+      onClick={resetIdleTimer}
       onTouchEnd={handleTouchEnd}
     >
-      {/* ✅ Forces the native fullscreen button to hide in Safari/Chrome */}
       <style>{`
-        video::-webkit-media-controls-fullscreen-button {
-          display: none !important;
-        }
+        video::-webkit-media-controls-fullscreen-button { display: none !important; }
       `}</style>
 
       <video
         ref={videoRef}
         className="w-full h-full object-contain"
         controls
-        controlsList="nofullscreen" // ✅ Hides native fullscreen button in Chrome/Edge
-        playsInline                 // ✅ Stops iOS from hijacking to native player
+        controlsList="nofullscreen"
+        playsInline
         onPause={handlePause}
         onPlay={handlePlay}
         onSeeked={handleSeeked}
@@ -304,52 +383,76 @@ const VideoPlayer = ({
         onCanPlay={onBufferEnd}
       />
 
-      {/* ✅ Forces children to stay ON TOP. 
-          pointer-events-none lets users click the video behind it. 
-          If your messages need to be clickable, add 'pointer-events-auto' to the message component itself. */}
+      {/* Overlays Container */}
       <div className="absolute inset-0 z-[60] pointer-events-none">
         {children}
       </div>
 
-      {/* ── Double-tap indicators ──────────────────────────── */}
+      {/* ✅ Subdued Bottom Gradient (Vignette) for UI contrast */}
+      <div 
+        className={`absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/80 to-transparent pointer-events-none transition-opacity duration-500 ${
+          isIdle ? 'opacity-0' : 'opacity-100'
+        }`} 
+      />
+
+      {/* Double-tap indicators */}
       {seekIndicator === 'left' && (
-        <div className="absolute left-6 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-3 flex items-center gap-0.5 pointer-events-none">
-          <ChevronLeft size={18} className="text-white" />
-          <ChevronLeft size={18} className="text-white -ml-2.5" />
-          <span className="text-white text-xs font-semibold ml-1.5">5s</span>
+        <div className="absolute left-6 top-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md rounded-full px-5 py-4 flex items-center gap-0.5 pointer-events-none animate-in fade-in zoom-in-90 duration-200">
+          <ChevronLeft size={24} className="text-white" />
+          <ChevronLeft size={24} className="text-white -ml-3" />
+          <span className="text-white text-sm font-semibold ml-2">5s</span>
         </div>
       )}
       {seekIndicator === 'right' && (
-        <div className="absolute right-6 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-3 flex items-center gap-0.5 pointer-events-none">
-          <span className="text-white text-xs font-semibold mr-1.5">5s</span>
-          <ChevronRight size={18} className="text-white" />
-          <ChevronRight size={18} className="text-white -ml-2.5" />
+        <div className="absolute right-6 top-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md rounded-full px-5 py-4 flex items-center gap-0.5 pointer-events-none animate-in fade-in zoom-in-90 duration-200">
+          <span className="text-white text-sm font-semibold mr-2">5s</span>
+          <ChevronRight size={24} className="text-white" />
+          <ChevronRight size={24} className="text-white -ml-3" />
         </div>
       )}
 
-      {/* ── Controls overlay — bottom-right above native controls ── */}
-      <div className={`absolute ${isFullscreen ? "bottom-16" : "bottom-14"} right-3 flex items-center gap-1.5 z-[60]`}>
+      {/* ── Controls overlay — bottom-right ── */}
+      <div 
+        className={`absolute ${isFullscreen ? "bottom-16" : "bottom-14"} right-4 flex items-center gap-2 z-[60] transition-all duration-500 ease-out ${
+          isIdle ? 'opacity-0 translate-y-4 pointer-events-none' : 'opacity-100 translate-y-0 pointer-events-auto'
+        }`}
+        onMouseEnter={() => { if (idleTimeout.current) clearTimeout(idleTimeout.current) }} // Keep alive while hovering controls
+        onMouseLeave={resetIdleTimer}
+      >
         
         {levels.length > 0 && (
-          <TrackMenu label={qualityLabel()} icon="⚙" items={qualityItems} activeIndex={currentLevel} onChange={switchQuality} />
+          <TrackMenu label={qualityLabel()} icon="⚙" items={qualityItems} activeIndex={currentLevel} onChange={switchQuality} onToggle={setIsMenuOpen} />
         )}
 
         {audioTracks.length > 1 && (
-          <TrackMenu label={audioLabel()} icon="♪" items={audioItems} activeIndex={currentAudio} onChange={switchAudio} />
+          <TrackMenu label={audioLabel()} icon="♪" items={audioItems} activeIndex={currentAudio} onChange={switchAudio} onToggle={setIsMenuOpen} />
         )}
 
         {subtitleTracks.length > 0 && (
-          <TrackMenu label={subtitleLabel()} icon="CC" items={subtitleItems} activeIndex={currentSubtitle} onChange={switchSubtitle} accentWhenActive={true} />
+          <TrackMenu label={subtitleLabel()} icon="CC" items={subtitleItems} activeIndex={currentSubtitle} onChange={switchSubtitle} accentWhenActive={true} onToggle={setIsMenuOpen} />
         )}
 
-        {/* ✅ Custom Fullscreen Toggle Button added to your bottom-right overlay */}
-        <button
-          onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
-          className="flex items-center justify-center p-1.5 ml-1 rounded-lg bg-black/75 border border-white/15 text-white hover:bg-black/90 transition-colors backdrop-blur-sm"
-          title="Toggle Fullscreen"
-        >
-          {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
-        </button>
+        {/* Action Buttons Group */}
+        <div className="flex items-center bg-black/40 backdrop-blur-md rounded-full p-1 ml-1">
+          
+          {/* ✅ Rotate Button (Shows predominantly on touch/mobile logic, but safe to keep visible or hide via CSS) */}
+          <button
+            onClick={handleRotate}
+            className="p-1.5 rounded-full text-white/90 hover:bg-white/20 hover:text-white transition-colors md:hidden" // Hide on md+ screens
+            title="Rotate Screen"
+          >
+            <RotateCw size={16} />
+          </button>
+
+          {/* Fullscreen Button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+            className="p-1.5 rounded-full text-white/90 hover:bg-white/20 hover:text-white transition-colors"
+            title="Toggle Fullscreen"
+          >
+            {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+          </button>
+        </div>
 
       </div>
     </div>
