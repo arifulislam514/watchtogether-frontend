@@ -1,7 +1,8 @@
 // src/components/VideoPlayer.jsx
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Hls from 'hls.js'
-import { ChevronRight, ChevronLeft, ChevronDown, Check } from 'lucide-react'
+// ✅ Added Maximize and Minimize icons
+import { ChevronRight, ChevronLeft, ChevronDown, Check, Maximize, Minimize } from 'lucide-react'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
 
@@ -64,7 +65,7 @@ const VideoPlayer = ({
   videoRef: externalRef,
   isSyncingRef,
   blockedRef,
-  children,   // ✅ overlays rendered inside container — visible in fullscreen
+  children,
 }) => {
   const internalRef  = useRef(null)
   const videoRef     = externalRef || internalRef
@@ -92,26 +93,15 @@ const VideoPlayer = ({
       const hls = new Hls({
         enableWorker:   true,
         startLevel:     -1,
-        renderTextTracksNatively: true,  // let browser render subtitles natively
+        renderTextTracksNatively: true,
       })
       hlsRef.current = hls
       hls.loadSource(fullUrl)
       hls.attachMedia(videoRef.current)
 
-      // ✅ MANIFEST_PARSED — video levels only (audio/sub may not be ready yet)
-      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-        setLevels(data.levels || [])
-      })
-
-      // ✅ AUDIO_TRACKS_UPDATED — fires when audio track list is fully known
-      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_, data) => {
-        setAudioTracks(data.audioTracks || [])
-      })
-
-      // ✅ SUBTITLE_TRACKS_UPDATED — fires when subtitle track list is fully known
-      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_, data) => {
-        setSubtitleTracks(data.subtitleTracks || [])
-      })
+      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => { setLevels(data.levels || []) })
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_, data) => { setAudioTracks(data.audioTracks || []) })
+      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_, data) => { setSubtitleTracks(data.subtitleTracks || []) })
 
       hls.on(Hls.Events.LEVEL_SWITCHED,        (_, d) => setCurrentLevel(d.level))
       hls.on(Hls.Events.AUDIO_TRACK_SWITCHED,  (_, d) => setCurrentAudio(d.id))
@@ -129,35 +119,41 @@ const VideoPlayer = ({
   }, [masterUrl])
 
   // ── Fullscreen handling ───────────────────────────────────
-  // Override the video element's requestFullscreen so the native controls fullscreen
-  // button fullscreens the CONTAINER (which has our overlays) instead of just the video.
   useEffect(() => {
     const video = videoRef.current
     const container = containerRef.current
     if (!video || !container) return
 
-    // Save original method
     const originalRequestFullscreen = video.requestFullscreen?.bind(video)
-
-    // Override: redirect to container fullscreen
     video.requestFullscreen = () => container.requestFullscreen()
 
-    // Also handle webkit (Safari/iOS)
     if (video.webkitRequestFullscreen) {
       video.webkitRequestFullscreen = () =>
         container.webkitRequestFullscreen?.() || container.requestFullscreen()
     }
 
-    // Track fullscreen state
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement)
+    const onChange = () => setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement))
     document.addEventListener('fullscreenchange', onChange)
     document.addEventListener('webkitfullscreenchange', onChange)
 
     return () => {
-      // Restore original method on cleanup
       if (originalRequestFullscreen) video.requestFullscreen = originalRequestFullscreen
       document.removeEventListener('fullscreenchange', onChange)
       document.removeEventListener('webkitfullscreenchange', onChange)
+    }
+  }, [])
+
+  // ✅ Robust manual fullscreen toggle logic
+  const toggleFullscreen = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      if (document.exitFullscreen) document.exitFullscreen()
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen()
+    } else {
+      if (container.requestFullscreen) container.requestFullscreen()
+      else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen()
     }
   }, [])
 
@@ -186,7 +182,7 @@ const VideoPlayer = ({
         case 'ArrowDown': e.preventDefault(); videoRef.current.volume = Math.max(0, videoRef.current.volume - 0.1); break
         case 'f': case 'F':
           e.preventDefault()
-          document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen()
+          toggleFullscreen() // ✅ Centralized
           break
         case 'm': case 'M':
           e.preventDefault()
@@ -196,7 +192,7 @@ const VideoPlayer = ({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [toggleFullscreen])
 
   const flash = (side) => {
     setSeekIndicator(side)
@@ -232,7 +228,6 @@ const VideoPlayer = ({
   const handlePlay   = () => {
     if (isSyncingRef?.current) return
     if (blockedRef?.current) {
-      // ✅ Set syncing BEFORE pausing so handlePause doesn't broadcast
       isSyncingRef.current = true
       videoRef.current?.pause()
       setTimeout(() => { isSyncingRef.current = false }, 300)
@@ -248,7 +243,6 @@ const VideoPlayer = ({
   const switchSubtitle = (v) => {
     if (hlsRef.current) {
       hlsRef.current.subtitleTrack = v
-      // ✅ For native rendering: activate the correct TextTrack on the video element
       if (videoRef.current?.textTracks) {
         Array.from(videoRef.current.textTracks).forEach((track, i) => {
           track.mode = (v >= 0 && i === v) ? 'showing' : 'hidden'
@@ -263,12 +257,7 @@ const VideoPlayer = ({
     { label: 'Auto', value: -1 },
     ...[...levels].reverse().map((l, i) => ({ label: `${l.height}p`, value: levels.length - 1 - i }))
   ]
-
-  const audioItems = audioTracks.map((t, i) => ({
-    label: t.name || t.lang || `Track ${i + 1}`,
-    value: i,
-  }))
-
+  const audioItems = audioTracks.map((t, i) => ({ label: t.name || t.lang || `Track ${i + 1}`, value: i }))
   const subtitleItems = [
     { label: 'Off', value: -1 },
     ...subtitleTracks.map((t, i) => ({ label: t.name || t.lang || `Sub ${i + 1}`, value: i }))
@@ -278,13 +267,10 @@ const VideoPlayer = ({
     if (currentLevel === -1) return 'Auto'
     return levels[currentLevel] ? `${levels[currentLevel].height}p` : 'Auto'
   }
-
   const audioLabel = () => {
     if (!audioTracks[currentAudio]) return 'Audio'
-    const t = audioTracks[currentAudio]
-    return t.name || t.lang || 'Audio'
+    return audioTracks[currentAudio].name || audioTracks[currentAudio].lang || 'Audio'
   }
-
   const subtitleLabel = () => {
     if (currentSubtitle === -1) return 'CC'
     const t = subtitleTracks[currentSubtitle]
@@ -298,10 +284,19 @@ const VideoPlayer = ({
       onClick={() => {}}
       onTouchEnd={handleTouchEnd}
     >
+      {/* ✅ Forces the native fullscreen button to hide in Safari/Chrome */}
+      <style>{`
+        video::-webkit-media-controls-fullscreen-button {
+          display: none !important;
+        }
+      `}</style>
+
       <video
         ref={videoRef}
         className="w-full h-full object-contain"
         controls
+        controlsList="nofullscreen" // ✅ Hides native fullscreen button in Chrome/Edge
+        playsInline                 // ✅ Stops iOS from hijacking to native player
         onPause={handlePause}
         onPlay={handlePlay}
         onSeeked={handleSeeked}
@@ -309,8 +304,12 @@ const VideoPlayer = ({
         onCanPlay={onBufferEnd}
       />
 
-      {/* ✅ Children rendered inside container — visible in fullscreen */}
-      {children}
+      {/* ✅ Forces children to stay ON TOP. 
+          pointer-events-none lets users click the video behind it. 
+          If your messages need to be clickable, add 'pointer-events-auto' to the message component itself. */}
+      <div className="absolute inset-0 z-[60] pointer-events-none">
+        {children}
+      </div>
 
       {/* ── Double-tap indicators ──────────────────────────── */}
       {seekIndicator === 'left' && (
@@ -329,41 +328,29 @@ const VideoPlayer = ({
       )}
 
       {/* ── Controls overlay — bottom-right above native controls ── */}
-      <div className={`absolute ${isFullscreen ? "bottom-16" : "bottom-14"} right-3 flex items-center gap-1.5`}>
-
-        {/* Quality */}
+      <div className={`absolute ${isFullscreen ? "bottom-16" : "bottom-14"} right-3 flex items-center gap-1.5 z-[60]`}>
+        
         {levels.length > 0 && (
-          <TrackMenu
-            label={qualityLabel()}
-            icon="⚙"
-            items={qualityItems}
-            activeIndex={currentLevel}
-            onChange={switchQuality}
-          />
+          <TrackMenu label={qualityLabel()} icon="⚙" items={qualityItems} activeIndex={currentLevel} onChange={switchQuality} />
         )}
 
-        {/* Audio tracks */}
         {audioTracks.length > 1 && (
-          <TrackMenu
-            label={audioLabel()}
-            icon="♪"
-            items={audioItems}
-            activeIndex={currentAudio}
-            onChange={switchAudio}
-          />
+          <TrackMenu label={audioLabel()} icon="♪" items={audioItems} activeIndex={currentAudio} onChange={switchAudio} />
         )}
 
-        {/* Subtitles */}
         {subtitleTracks.length > 0 && (
-          <TrackMenu
-            label={subtitleLabel()}
-            icon="CC"
-            items={subtitleItems}
-            activeIndex={currentSubtitle}
-            onChange={switchSubtitle}
-            accentWhenActive={true}
-          />
+          <TrackMenu label={subtitleLabel()} icon="CC" items={subtitleItems} activeIndex={currentSubtitle} onChange={switchSubtitle} accentWhenActive={true} />
         )}
+
+        {/* ✅ Custom Fullscreen Toggle Button added to your bottom-right overlay */}
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+          className="flex items-center justify-center p-1.5 ml-1 rounded-lg bg-black/75 border border-white/15 text-white hover:bg-black/90 transition-colors backdrop-blur-sm"
+          title="Toggle Fullscreen"
+        >
+          {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+        </button>
+
       </div>
     </div>
   )
