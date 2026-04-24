@@ -128,11 +128,27 @@ const VideoPlayer = ({
     }
   }, [masterUrl])
 
-  // ── Track fullscreen state ────────────────────────────────
+  // ── Fullscreen handling ───────────────────────────────────
+  // When the native controls fullscreen button is clicked, the browser fullscreens
+  // the <video> element directly — our overlay children are NOT inside it, so they
+  // disappear. We intercept that and redirect to the container div instead.
   useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement)
-    document.addEventListener('fullscreenchange', onChange)
-    return () => document.removeEventListener('fullscreenchange', onChange)
+    const onFullscreenChange = () => {
+      const fsEl = document.fullscreenElement
+
+      // If the VIDEO itself went fullscreen (not our container), redirect to container
+      if (fsEl && videoRef.current && fsEl === videoRef.current) {
+        document.exitFullscreen().then(() => {
+          containerRef.current?.requestFullscreen()
+        }).catch(() => {})
+        return
+      }
+
+      setIsFullscreen(!!fsEl)
+    }
+
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
   }, [])
 
   // ── Keyboard controls ──────────────────────────────────────
