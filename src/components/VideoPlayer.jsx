@@ -129,26 +129,36 @@ const VideoPlayer = ({
   }, [masterUrl])
 
   // ── Fullscreen handling ───────────────────────────────────
-  // When the native controls fullscreen button is clicked, the browser fullscreens
-  // the <video> element directly — our overlay children are NOT inside it, so they
-  // disappear. We intercept that and redirect to the container div instead.
+  // Override the video element's requestFullscreen so the native controls fullscreen
+  // button fullscreens the CONTAINER (which has our overlays) instead of just the video.
   useEffect(() => {
-    const onFullscreenChange = () => {
-      const fsEl = document.fullscreenElement
+    const video = videoRef.current
+    const container = containerRef.current
+    if (!video || !container) return
 
-      // If the VIDEO itself went fullscreen (not our container), redirect to container
-      if (fsEl && videoRef.current && fsEl === videoRef.current) {
-        document.exitFullscreen().then(() => {
-          containerRef.current?.requestFullscreen()
-        }).catch(() => {})
-        return
-      }
+    // Save original method
+    const originalRequestFullscreen = video.requestFullscreen?.bind(video)
 
-      setIsFullscreen(!!fsEl)
+    // Override: redirect to container fullscreen
+    video.requestFullscreen = () => container.requestFullscreen()
+
+    // Also handle webkit (Safari/iOS)
+    if (video.webkitRequestFullscreen) {
+      video.webkitRequestFullscreen = () =>
+        container.webkitRequestFullscreen?.() || container.requestFullscreen()
     }
 
-    document.addEventListener('fullscreenchange', onFullscreenChange)
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
+    // Track fullscreen state
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onChange)
+    document.addEventListener('webkitfullscreenchange', onChange)
+
+    return () => {
+      // Restore original method on cleanup
+      if (originalRequestFullscreen) video.requestFullscreen = originalRequestFullscreen
+      document.removeEventListener('fullscreenchange', onChange)
+      document.removeEventListener('webkitfullscreenchange', onChange)
+    }
   }, [])
 
   // ── Keyboard controls ──────────────────────────────────────
