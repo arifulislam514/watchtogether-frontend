@@ -18,16 +18,25 @@ import Button from "../components/ui/Button";
 const ChatOverlay = ({ messages }) => {
   if (!messages.length) return null
   return (
-    <div className="absolute bottom-16 left-3 flex flex-col gap-1 pointer-events-none z-10 max-w-xs">
-      {messages.slice(-4).map((msg, i) => (
+    <div className="absolute bottom-20 left-3 flex flex-col gap-1.5 pointer-events-none z-20 max-w-[260px]">
+      {messages.map((msg, i) => (
         <div
           key={i}
-          className="bg-black/70 text-white text-sm px-3 py-1.5 rounded-lg backdrop-blur-sm"
+          style={{ animation: "fadeInOut 4s ease forwards" }}
+          className="bg-black/75 text-white px-3 py-1.5 rounded-lg backdrop-blur-sm shadow-lg"
         >
           <span className="text-violet-400 font-semibold text-xs">{msg.user_name}: </span>
-          <span className="text-xs">{msg.text}</span>
+          <span className="text-xs break-words">{msg.text}</span>
         </div>
       ))}
+      <style>{`
+        @keyframes fadeInOut {
+          0%   { opacity: 0; transform: translateY(6px); }
+          10%  { opacity: 1; transform: translateY(0); }
+          70%  { opacity: 1; }
+          100% { opacity: 0; }
+        }
+      `}</style>
     </div>
   )
 }
@@ -682,8 +691,8 @@ const RoomPage = () => {
                 onBuffer={handleBuffer}
                 onBufferEnd={handleBufferEnd}
               >
-                {/* Chat overlay — shows last 4 messages, always visible in fullscreen */}
-                <ChatOverlay messages={chatMessages} />
+                {/* Chat overlay — temporary flash when someone sends a message, visible in fullscreen */}
+                <ChatOverlay messages={overlayMsgs} />
 
                 {/* Paused-by banner */}
                 {pausedBy && (
